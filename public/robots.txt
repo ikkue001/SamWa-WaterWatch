@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://samwa-waterwatch.pages.dev/sitemap.xml
