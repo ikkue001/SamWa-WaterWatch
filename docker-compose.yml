@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  flood-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flood-emergency-monitor
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - TZ=Asia/Bangkok
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

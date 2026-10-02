@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="th" class="dark w-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>น้ำสามวา (SamWa WaterWatch) - ระบบเฝ้าระวังระดับน้ำและเตือนภัยฉุกเฉิน</title>
+  
+  <!-- Favicon & App Icons -->
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="apple-touch-icon" href="/logo.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            alertRed: '#ef4444',
+            warningAmber: '#f59e0b',
+            darkBg: '#090d16',
+            cardBg: '#111827',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet Interactive Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-[#090d16] text-slate-100 min-h-screen flex flex-col selection:bg-red-500 selection:text-white w-full">
+
+  <!-- ================= TOP NAVIGATION & CONTROLS (STICKY HEADER) ================= -->
+  <header class="sticky top-0 z-50 w-full bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-lg">
+    <div class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-2 sm:gap-3">
+      
+      <!-- [ฝั่งซ้าย: แบรนด์และชื่อระบบ (Brand Info)] -->
+      <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+        <img src="/logo.png" alt="น้ำสามวา SamWa WaterWatch Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0 shadow-md shadow-sky-500/20 border border-sky-400/30">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-sm sm:text-base md:text-lg font-black tracking-tight text-white flex items-center gap-1.5 truncate">
+              <span>น้ำสามวา</span>
+              <span class="text-sky-400 font-bold text-xs sm:text-sm font-sans">(SamWa WaterWatch)</span>
+            </h1>
+          </div>
+          <p class="text-[11px] sm:text-xs text-slate-400 leading-tight truncate mt-0.5">
+            ระบบเฝ้าระวังและเตือนภัยระดับน้ำ: คลองหกวา • คลองพระยาสุเรนทร์ • คลองสามวา
+          </p>
+        </div>
+      </div>
+
+      <!-- [ฝั่งขวา: สถานะและปุ่มควบคุม (Status Badges & Controls)] -->
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap justify-start md:justify-end">
+        
+        <!-- สถานะระบบ: จุดสถานะสด 🟢 Live Connected (สัญญาณดาวเทียมตรวจวัดสด) -->
+        <span id="realtimeConnectionBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[36px] sm:min-h-[38px] rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0" title="สถานะการเชื่อมต่อข้อมูล Realtime">
+          <span class="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="animate-pulse relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+          </span>
+          <span class="hidden sm:inline font-medium">Live Connected</span>
+          <span class="sm:hidden font-medium">Live</span>
+        </span>
+
+        <!-- พิกัด GPS: แสดงแบบย่อ เช่น 📍 13.881, 100.711 -->
+        <button id="btnGpsRefresh" class="min-h-[36px] sm:min-h-[38px] flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 active:bg-slate-700 text-sky-300 border border-slate-700/80 transition shadow-sm touch-manipulation shrink-0" title="ค้นหาสถานีที่ใกล้คุณที่สุดด้วยพิกัด GPS (หรือแสดงพิกัดปัจจุบัน)">
+          <i id="gpsStatusIcon" data-lucide="locate-fixed" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+          <span id="gpsBtnText" class="truncate text-[11px] sm:text-xs font-mono">📍 13.881, 100.711</span>
+        </button>
+
+        <!-- เวลาตรวจวัดข้อมูลล่าสุด -->
+        <div id="headerLastUpdatedBadge" class="flex min-h-[36px] sm:min-h-[38px] items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 shrink-0" title="เวลาตรวจวัดข้อมูลล่าสุด">
+          <i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+          <span class="hidden sm:inline text-slate-400">อัปเดต:</span>
+          <span id="lastUpdatedTime" class="font-mono text-emerald-300 font-medium">กำลังโหลด...</span>
+        </div>
+
+        <!-- ปุ่มรีเฟรช (+ ตัวจับเวลานับถอยหลัง) -->
+        <button id="btnRefresh" class="group min-h-[36px] sm:min-h-[38px] px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600/90 hover:bg-blue-500 active:bg-blue-700 text-white transition flex items-center gap-1.5 shadow-sm disabled:opacity-50 touch-manipulation shrink-0" title="กดเพื่อดึงข้อมูลระดับน้ำล่าสุดทันที (นับถอยหลังรอบถัดไป)">
+          <i id="refreshIcon" data-lucide="refresh-cw" class="w-3.5 h-3.5 shrink-0 transition-transform duration-700 ease-in-out group-hover:rotate-180"></i>
+          <span id="countdownTimer" class="font-mono text-blue-100 font-bold">02:30</span>
+        </button>
+
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= TIER 3: EMERGENCY ALERT BANNER (Flashing Red when isOverflow is true) ================= -->
+  <section id="emergencyBanner" class="hidden transition-all duration-300">
+    <div class="emergency-banner-flash text-white shadow-2xl emergency-border-pulse border-y-2 border-red-300">
+      <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+        <!-- Header row: headline and action buttons neatly separated -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/20">
+          <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-white/20 rounded-xl animate-bounce shrink-0">
+              <i data-lucide="siren" class="w-6 h-6 sm:w-7 sm:h-7 text-white"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-black bg-white text-red-700 tracking-wider">
+                  EMERGENCY ALERT
+                </span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-red-100">สถานะฉุกเฉินทันที (🔴) - น้ำล้นตลิ่ง</span>
+              </div>
+              <h2 id="emergencySummaryHeadline" class="text-base sm:text-xl font-black mt-0.5 text-white">
+                🚨 ฉุกเฉิน: น้ำล้นตลิ่งแล้ว!
+              </h2>
+            </div>
+          </div>
+
+          <!-- Quick Action Buttons: Hotline contacts -->
+          <div class="flex items-center gap-2 shrink-0 flex-wrap">
+            <a href="tel:1784" class="px-3 py-1.5 bg-white text-red-700 hover:bg-red-50 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg transition">
+              <i data-lucide="phone-call" class="w-4 h-4"></i>
+              <span>สายด่วน ปภ. 1784</span>
+            </a>
+            <a href="tel:1555" class="px-3 py-1.5 bg-red-950/60 text-white hover:bg-red-900 border border-red-300/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+              <i data-lucide="phone" class="w-4 h-4"></i>
+              <span>ศูนย์ กทม. 1555</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Station Cards Container: Responsive Grid -->
+        <div id="emergencyStationCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+          <!-- Dynamically populated cards with station name, levels, diff pill, and limits -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= TIER 2: WARNING ALERT BANNER (Amber-Orange when waterLevel >= criticalLevel) ================= -->
+  <section id="warningBanner" class="hidden transition-all duration-300">
+    <div class="warning-banner-glow text-white shadow-xl border-y border-amber-400">
+      <div class="max-w-7xl mx-auto px-4 py-3.5 sm:px-6 lg:px-8">
+        <!-- Header row: headline and action buttons neatly separated -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-300/20">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-amber-400/20 rounded-xl text-amber-200 shrink-0">
+              <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-200"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-900 tracking-wider">
+                  WARNING ALERT
+                </span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-amber-100">สถานะเตือนภัย (🟡/🟠) - เตรียมความพร้อม</span>
+              </div>
+              <h3 id="warningSummaryHeadline" class="text-base sm:text-lg font-bold mt-0.5 text-white">
+                ⚠️ เตือนภัย: ระดับน้ำเข้าสู่จุดวิกฤติ ให้เตรียมความพร้อม/ยกของขึ้นที่สูง
+              </h3>
+            </div>
+          </div>
+
+          <!-- Quick Action Buttons: top right -->
+          <div class="flex items-center gap-2 shrink-0">
+            <a href="tel:1784" class="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-950 border border-amber-300/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition text-amber-200">
+              <i data-lucide="phone-call" class="w-3.5 h-3.5"></i>
+              <span>ปภ. 1784</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- Station Cards Container: Responsive Grid -->
+        <div id="warningStationCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+          <!-- Dynamically populated cards with station name, levels, diff pill, and limits -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MAIN CONTENT ================= -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 flex-1 w-full space-y-5 sm:space-y-6 overflow-hidden">
+
+    <!-- ================= FLOOD EMERGENCY GUIDELINES (COLLAPSIBLE / AUTO-EXPAND) ================= -->
+    <section id="floodGuidelinesSection" class="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur-md overflow-hidden transition-all duration-300 shadow-lg">
+      
+      <!-- Collapsible Header / Toggle Bar -->
+      <button id="btnToggleGuidelines" type="button" class="w-full px-3.5 sm:px-6 py-3.5 flex items-center justify-between text-left hover:bg-slate-800/40 transition gap-3 focus:outline-none select-none cursor-pointer touch-manipulation" aria-expanded="false" aria-controls="guidelinesContent">
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <div id="guidelinesHeaderIcon" class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 shadow-sm transition-colors">
+            <i data-lucide="book-open" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-sm sm:text-base font-bold text-white tracking-tight">📖 แนวทางปฏิบัติเมื่อเกิดเหตุระดับน้ำวิกฤติ / ล้นตลิ่ง (Flood Emergency Guidelines)</span>
+              <span id="guidelinesStatusPill" class="hidden text-[11px] font-bold px-2.5 py-0.5 rounded-full border shadow-sm"></span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">คู่มือเตรียมความพร้อม สิ่งที่ต้องปฏิบัติทันที และเบอร์สายด่วนฉุกเฉินสำหรับชาวคลองสามวาและพื้นที่รอยต่อ</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <span id="guidelinesToggleText" class="text-xs text-slate-400 hidden sm:inline font-medium">ดูแนวทางปฏิบัติ</span>
+          <div class="w-8 h-8 rounded-lg bg-slate-800/80 border border-slate-700/70 flex items-center justify-center text-slate-300 shadow-sm transition">
+            <i id="guidelinesChevron" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-300"></i>
+          </div>
+        </div>
+      </button>
+
+      <!-- Collapsible Body Content (Smooth CSS Grid Accordion) -->
+      <div id="guidelinesAccordion" class="accordion-collapse">
+        <div class="accordion-inner">
+          <div id="guidelinesContent" class="border-t border-slate-800/80 p-3.5 sm:p-5 md:p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          
+          <!-- Column 1: Warning / Critical (🟠 เตือนภัย - เตรียมความพร้อม) -->
+          <div class="bg-gradient-to-b from-amber-950/20 via-slate-900/60 to-slate-900/80 rounded-2xl p-4 sm:p-5 border border-amber-500/30 shadow-md flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3.5 mb-4 border-b border-amber-500/20">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <h3 class="text-sm sm:text-base font-bold text-amber-300">เกณฑ์วิกฤติ (🟠 เตือนภัย - เตรียมความพร้อม)</h3>
+                    <p class="text-[11px] text-amber-200/70">ระดับน้ำแตะเกณฑ์วิกฤติ (Warning Level) มีแนวโน้มเพิ่มสูง</p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  เตรียมพร้อม
+                </span>
+              </div>
+
+              <ul class="space-y-3 text-xs sm:text-sm text-slate-200">
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/60">
+                  <div class="p-1 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
+                    <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-white">ยกเครื่องใช้ไฟฟ้าและของมีค่าขึ้นที่สูง:</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">ยกเครื่องใช้ไฟฟ้า ปลั๊กไฟเคลื่อนที่ ตู้เย็น และของมีค่าขึ้นที่สูงกว่า 1.5 เมตร หรือย้ายขึ้นชั้น 2 ของตัวบ้าน</p>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/60">
+                  <div class="p-1 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
+                    <i data-lucide="car" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-white">ย้ายยานพาหนะ:</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">ย้ายรถยนต์และรถจักรยานยนต์ไปจอดบนพื้นที่ดอน คอสะพาน หรือลานจอดรถที่เตรียมการไว้</p>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/60">
+                  <div class="p-1 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-white">เสริมแนวกระสอบทราย:</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">เสริมแนวกระสอบทรายบริเวณทางเข้าบ้าน ประตูรั้ว และอุดปิดรอบท่อระบายน้ำเพื่อป้องกันน้ำไหลย้อนกลับ</p>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-slate-800/60">
+                  <div class="p-1 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
+                    <i data-lucide="briefcase" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-white">จัดเตรียมกระเป๋าฉุกเฉิน (Emergency Kit):</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">เตรียมยาสามัญประจำบ้าน เอกสารสำคัญใส่ซองกันน้ำ ไฟฉาย แบตเตอรี่สำรอง (Powerbank) และน้ำดื่มสะอาดบรรจุขวด</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-amber-500/20 text-[11px] text-amber-300/80 flex items-center gap-1.5">
+              <i data-lucide="clock" class="w-3.5 h-3.5 shrink-0"></i>
+              <span>ติดตามสถานการณ์ระดับน้ำสดผ่านหน้านี้อย่างใกล้ชิด</span>
+            </div>
+          </div>
+
+          <!-- Column 2: Emergency / Overflow (🔴 ฉุกเฉิน - ปฏิบัติทันที) -->
+          <div class="bg-gradient-to-b from-red-950/25 via-slate-900/60 to-slate-900/80 rounded-2xl p-4 sm:p-5 border border-red-500/30 shadow-md flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3.5 mb-4 border-b border-red-500/20">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 flex items-center justify-center shrink-0">
+                    <i data-lucide="siren" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <h3 class="text-sm sm:text-base font-bold text-red-300">เกณฑ์ล้นตลิ่ง (🔴 ฉุกเฉิน - ปฏิบัติทันที)</h3>
+                    <p class="text-[11px] text-red-200/70">ระดับน้ำเอ่อล้นแนวตลิ่ง/คันกั้นน้ำ (Bank Overflow) เข้าท่วมพื้นที่</p>
+                  </div>
+                </div>
+                <span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse">
+                  ปฏิบัติทันที
+                </span>
+              </div>
+
+              <ul class="space-y-3 text-xs sm:text-sm text-slate-200 mb-4">
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-red-900/30">
+                  <div class="p-1 rounded-lg bg-red-500/10 text-red-400 shrink-0 mt-0.5">
+                    <i data-lucide="zap-off" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-red-200">สับเบรกเกอร์/ตัดไฟชั้นล่างทันที:</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">ตัดสะพานไฟหรือเบรกเกอร์วงจรไฟฟ้าชั้นล่างทันทีเพื่อป้องกันไฟดูด ไฟฟ้ารั่ว และอัคคีภัย ห้ามสัมผัสปลั๊กไฟขณะตัวเปียก</p>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-red-900/30">
+                  <div class="p-1 rounded-lg bg-red-500/10 text-red-400 shrink-0 mt-0.5">
+                    <i data-lucide="users" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-red-200">อพยพกลุ่มเปราะบาง:</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">เร่งช่วยเหลือผู้สูงอายุ เด็กเล็ก ผู้ป่วยติดเตียง และสัตว์เลี้ยง ไปยังศูนย์พักพิงชั่วคราวหรือพื้นที่ปลอดภัย</p>
+                  </div>
+                </li>
+
+                <li class="flex items-start gap-2.5 sm:gap-3 bg-slate-950/30 p-2.5 rounded-xl border border-red-900/30">
+                  <div class="p-1 rounded-lg bg-red-500/10 text-red-400 shrink-0 mt-0.5">
+                    <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                  </div>
+                  <div>
+                    <b class="text-red-200">ระวังสัตว์มีพิษและเลี่ยงเดินลุยน้ำเปล่า:</b>
+                    <p class="text-slate-300 mt-0.5 text-xs">ระวังสัตว์มีพิษ (งู ตะขาบ แมงป่อง) ที่หนีน้ำ สวมรองเท้าบูทยางทุกครั้ง หลีกเลี่ยงการเดินลุยน้ำคลำทางใกล้อุปกรณ์ไฟฟ้า</p>
+                  </div>
+                </li>
+              </ul>
+
+              <!-- Emergency Hotlines Grid with tel: links (Thumb-friendly >= 46px touch target) -->
+              <div class="pt-3 border-t border-red-500/20">
+                <div class="text-xs font-bold text-red-300 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
+                  <i data-lucide="phone-call" class="w-3.5 h-3.5 text-red-400"></i>
+                  <span>เบอร์สายด่วนฉุกเฉิน (คลิกโทรออกได้ทันที 24 ชม.):</span>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <!-- ปภ. 1784 -->
+                  <a href="tel:1784" class="min-h-[46px] flex items-center justify-between p-3 rounded-xl bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 active:scale-98 transition group shadow-sm touch-manipulation">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+                        <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+                      </div>
+                      <span class="font-medium text-white sm:text-slate-200">สายด่วน ปภ. (24 ชม.)</span>
+                    </div>
+                    <span class="font-bold font-mono text-white bg-red-600 px-2.5 py-1 rounded-md text-xs shadow-sm">1784</span>
+                  </a>
+
+                  <!-- ศูนย์ป้องกันน้ำท่วม กทม. 02-248-5115 -->
+                  <a href="tel:022485115" class="min-h-[46px] flex items-center justify-between p-3 rounded-xl bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 active:scale-98 transition group shadow-sm touch-manipulation">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+                        <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+                      </div>
+                      <span class="font-medium text-white sm:text-slate-200">ศูนย์น้ำท่วม กทม.</span>
+                    </div>
+                    <span class="font-bold font-mono text-white bg-red-600/90 px-2.5 py-1 rounded-md text-xs shadow-sm">02-248-5115</span>
+                  </a>
+
+                  <!-- สนง.เขตคลองสามวา 02-548-0320 -->
+                  <a href="tel:025480320" class="min-h-[46px] flex items-center justify-between p-3 rounded-xl bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 active:scale-98 transition group shadow-sm touch-manipulation">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+                        <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+                      </div>
+                      <span class="font-medium text-white sm:text-slate-200">สนง.เขตคลองสามวา</span>
+                    </div>
+                    <span class="font-bold font-mono text-white bg-red-600/90 px-2.5 py-1 rounded-md text-xs shadow-sm">02-548-0320</span>
+                  </a>
+
+                  <!-- กฟน. 1130 -->
+                  <a href="tel:1130" class="min-h-[46px] flex items-center justify-between p-3 rounded-xl bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 active:scale-98 transition group shadow-sm touch-manipulation">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+                        <i data-lucide="phone" class="w-3.5 h-3.5"></i>
+                      </div>
+                      <span class="font-medium text-white sm:text-slate-200">การไฟฟ้านครหลวง</span>
+                    </div>
+                    <span class="font-bold font-mono text-white bg-red-600/90 px-2.5 py-1 rounded-md text-xs shadow-sm">1130</span>
+                  </a>
+
+                  <!-- ศูนย์เอราวัณ / กู้ชีพ 1669 -->
+                  <a href="tel:1669" class="min-h-[46px] sm:col-span-2 flex items-center justify-between p-3 rounded-xl bg-red-500/15 hover:bg-red-500/30 border border-red-500/40 active:scale-98 transition group shadow-sm touch-manipulation">
+                    <div class="flex items-center gap-2.5">
+                      <div class="w-7 h-7 rounded-lg bg-red-500/30 flex items-center justify-center text-red-300 group-hover:scale-110 transition-transform">
+                        <i data-lucide="ambulance" class="w-4 h-4"></i>
+                      </div>
+                      <div>
+                        <span class="font-bold text-white">ศูนย์เอราวัณ / กู้ชีพการแพทย์ฉุกเฉิน</span>
+                        <span class="text-[11px] text-red-300/80 block sm:inline sm:ml-1">(เจ็บป่วยฉุกเฉิน อุบัติเหตุทางน้ำ)</span>
+                      </div>
+                    </div>
+                    <span class="font-bold font-mono text-white bg-red-600 px-3 py-1 rounded-md text-sm shadow">1669</span>
+                  </a>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- ================= INTERACTIVE FLOOD MAP (LEAFLET & OSM) ================= -->
+    <section id="mapSection" class="space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+        <div>
+          <h2 class="text-base sm:text-lg md:text-xl font-black text-white flex items-center gap-2">
+            <span class="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 shrink-0">
+              <i data-lucide="map" class="w-4 h-4"></i>
+            </span>
+            <span>แผนที่ระดับน้ำและตำแหน่งสถานีแบบ Realtime (Interactive Flood Map)</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            OpenStreetMap แสดงตำแหน่งคุณ รัศมีเตือนภัยใกล้ตัว 5 กม. และสถานีทั้ง 9 จุด (แตะหมุดเพื่อดูข้อมูล หรือแตะการ์ดเพื่อซูม)
+          </p>
+        </div>
+
+        <!-- Map Quick Controls & Legend -->
+        <div class="flex items-center flex-wrap gap-2 text-xs">
+          <!-- Legend pills -->
+          <div class="flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-800 text-[10px] sm:text-[11px] flex-wrap">
+            <span class="inline-flex items-center gap-1 text-emerald-400 font-medium">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> ปกติ
+            </span>
+            <span class="text-slate-600">|</span>
+            <span class="inline-flex items-center gap-1 text-amber-400 font-medium">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> วิกฤติ
+            </span>
+            <span class="text-slate-600">|</span>
+            <span class="inline-flex items-center gap-1 text-red-400 font-medium">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block animate-pulse"></span> ล้นตลิ่ง
+            </span>
+            <span class="text-slate-600">|</span>
+            <span class="inline-flex items-center gap-1 text-yellow-300 font-medium">
+              <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block shadow-sm"></span> 🟡 5 กม.
+            </span>
+          </div>
+
+          <!-- Map Buttons -->
+          <button id="btnMapFitAll" class="min-h-[40px] px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 rounded-xl font-medium transition flex items-center gap-1 text-xs touch-manipulation" title="ย่อ-ขยายให้เห็นครบทุก 9 สถานี">
+            <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+            <span>แสดง 9 สถานี</span>
+          </button>
+          <button id="btnMapGoUser" class="min-h-[40px] px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 rounded-xl font-medium transition flex items-center gap-1 text-xs touch-manipulation" title="เลื่อนมุมมองไปยังตำแหน่ง GPS ของคุณ">
+            <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+            <span>ตำแหน่งฉัน</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Map Element: Responsive height (340px on mobile, 460px on tablet, 500px on desktop) -->
+      <div class="relative w-full rounded-2xl overflow-hidden border border-slate-800 shadow-2xl glass-panel">
+        <div id="floodMap" class="w-full h-[340px] sm:h-[460px] lg:h-[500px]"></div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 1: SMART CANAL GPS (Nearest Canal Line Upstream -> Downstream) ================= -->
+    <section id="smartCanalSectionContainer">
+      <div class="p-6 sm:p-8 text-center glass-panel rounded-3xl border border-slate-800 text-slate-400">
+        <i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto text-blue-400 mb-2"></i>
+        <span>กำลังเชื่อมต่อ Realtime และคำนวณสายคลองตามตำแหน่ง GPS ของคุณ...</span>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 2: 4 PINNED PRIORITY STATIONS (รอยต่อ ปทุมธานี - กทม.) ================= -->
+    <section>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div>
+          <h2 class="text-base sm:text-lg md:text-xl font-black text-white flex items-center gap-2">
+            <span class="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 shrink-0">
+              <i data-lucide="pin" class="w-4 h-4"></i>
+            </span>
+            <span>ส่วนที่ 2: โซนเฝ้าระวังหลัก 4 จุดสำคัญ (Pinned Priority Stations)</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            จุดวัดหลักคลองหกวา คลอง 8, ปตร.คลองแปด อบจ., สูบน้ำกลางคลองหกวา นิมิตใหม่, คลองสามวา เทศบาลลำลูกกา 1 (แสดงผลตลอดเวลาไม่ว่าจะอยู่จุดใด)
+          </p>
+        </div>
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 shrink-0 w-fit">
+          4 สถานีหลักปักหมุด
+        </span>
+      </div>
+
+      <!-- 4 Pinned Cards Grid: 1 col on mobile, 2 cols on tablet, 4 cols on desktop -->
+      <div id="pinnedPriorityContainer" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </section>
+
+    <!-- ================= SECTION 3: ALL CANALS & BMA STATIONS ================= -->
+    <section>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+        <div>
+          <h2 class="text-base sm:text-lg md:text-xl font-black text-white flex items-center gap-2">
+            <span class="p-1.5 bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/30 shrink-0">
+              <i data-lucide="layers" class="w-4 h-4"></i>
+            </span>
+            <span>ส่วนที่ 3: สถานีทั้งหมดจำแนกตามสายคลองและประตูระบายน้ำ</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            แนวคลองพระยาสุเรนทร์ (ID: 126, 125, 124, 127) เรียงจากต้นน้ำสู่ปลายน้ำ และจุดวัดหลัก กทม. (ID 21)
+          </p>
+        </div>
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 shrink-0 w-fit">
+          สถานีทั้งหมด
+        </span>
+      </div>
+
+      <!-- All Canals Grid -->
+      <div id="allCanalsGrid">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="border-t border-slate-800/80 bg-slate-950 py-6 sm:py-8 mt-12 text-slate-400 text-xs sm:text-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center gap-3 sm:gap-3.5">
+      <!-- Developer Attribution -->
+      <div class="flex flex-wrap items-center justify-center gap-1.5 leading-relaxed">
+        <span>พัฒนาโดย</span>
+        <a href="https://linktr.ee/ikkueCM" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline underline-offset-4 font-semibold transition touch-manipulation inline-flex items-center gap-1">
+          <span>Kunanon Srikham</span>
+          <i data-lucide="external-link" class="w-3.5 h-3.5 inline-block text-blue-400/80"></i>
+        </a>
+      </div>
+
+      <!-- Data Source Attribution -->
+      <div class="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-slate-400 leading-relaxed text-xs sm:text-sm">
+        <span>ขอขอบคุณข้อมูลระดับน้ำจาก</span>
+        <a href="https://pathumthani.thaiwater.net/wl" target="_blank" rel="noopener noreferrer" class="text-slate-300 hover:text-sky-300 underline underline-offset-4 font-medium transition touch-manipulation">ศูนย์ข้อมูลน้ำระดับจังหวัด ปทุมธานี (ThaiWater)</a>
+        <span>และ</span>
+        <a href="https://weather.bangkok.go.th/water/" target="_blank" rel="noopener noreferrer" class="text-slate-300 hover:text-sky-300 underline underline-offset-4 font-medium transition touch-manipulation">สำนักการระบายน้ำ กรุงเทพมหานคร</a>
+      </div>
+
+      <!-- System Notice -->
+      <div class="text-[11px] text-slate-500 font-mono mt-1">
+        น้ำสามวา (SamWa WaterWatch) • ระบบเฝ้าระวังระดับน้ำและเตือนภัยฉุกเฉินชุมชนเขตคลองสามวาและรอยต่อ
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,649 @@
+/* Custom styling and Emergency Alert animations */
+
+@import url('https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Kanit:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+  --danger-red: #ef4444;
+  --warning-amber: #f59e0b;
+  --water-blue: #0284c7;
+  --bg-dark: #090d16;
+}
+
+html {
+  width: 100%;
+  box-sizing: border-box;
+  -webkit-text-size-adjust: 100%;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-dark);
+  color: #f1f5f9;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden; /* Fallback for older browsers */
+  overflow-x: clip;   /* Modern standard: clips horizontal overflow without breaking position: sticky */
+  transition: background-color 0.4s ease, box-shadow 0.4s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, a, input, select {
+  touch-action: manipulation;
+}
+
+.font-mono-numbers {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ========================================================
+   EMERGENCY ALERT (TIER 3 - RED FLASHING SCREEN)
+   ======================================================== */
+body.emergency-active {
+  animation: emergency-bg-breathe 2.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes emergency-bg-breathe {
+  0% {
+    background-color: #120303;
+    box-shadow: inset 0 0 80px rgba(239, 68, 68, 0.25);
+  }
+  50% {
+    background-color: #240606;
+    box-shadow: inset 0 0 160px rgba(239, 68, 68, 0.55);
+  }
+  100% {
+    background-color: #120303;
+    box-shadow: inset 0 0 80px rgba(239, 68, 68, 0.25);
+  }
+}
+
+.emergency-border-pulse {
+  animation: border-pulse 1.8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes border-pulse {
+  0% {
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    border-color: rgba(254, 202, 202, 0.95);
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.75);
+  }
+  100% {
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+  }
+}
+
+/* Emergency Alert: Soft Ambient Breathing Neon Glow */
+.emergency-banner-flash {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.98), rgba(153, 27, 27, 0.98));
+  border-bottom: 2px solid rgba(254, 202, 202, 0.85);
+  animation: ambient-glow-danger 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+@keyframes ambient-glow-danger {
+  0% {
+    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3), inset 0 0 18px rgba(239, 68, 68, 0.2);
+    border-color: rgba(254, 202, 202, 0.45);
+  }
+  50% {
+    box-shadow: 0 8px 40px rgba(239, 68, 68, 0.7), 0 0 30px rgba(239, 68, 68, 0.35), inset 0 0 30px rgba(254, 202, 202, 0.35);
+    border-color: rgba(254, 202, 202, 0.95);
+  }
+  100% {
+    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3), inset 0 0 18px rgba(239, 68, 68, 0.2);
+    border-color: rgba(254, 202, 202, 0.45);
+  }
+}
+
+/* ========================================================
+   WARNING ALERT (TIER 2 - AMBER-ORANGE BANNER)
+   ======================================================== */
+/* Warning Alert: Soft Ambient Breathing Neon Glow */
+.warning-banner-glow {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.95), rgba(180, 83, 9, 0.95));
+  border-bottom: 2px solid rgba(251, 191, 36, 0.85);
+  animation: ambient-glow-warning 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+@keyframes ambient-glow-warning {
+  0% {
+    box-shadow: 0 4px 18px rgba(245, 158, 11, 0.25), inset 0 0 15px rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 191, 36, 0.45);
+  }
+  50% {
+    box-shadow: 0 8px 36px rgba(245, 158, 11, 0.55), 0 0 25px rgba(245, 158, 11, 0.25), inset 0 0 25px rgba(251, 191, 36, 0.3);
+    border-color: rgba(253, 230, 138, 0.9);
+  }
+  100% {
+    box-shadow: 0 4px 18px rgba(245, 158, 11, 0.25), inset 0 0 15px rgba(251, 191, 36, 0.15);
+    border-color: rgba(251, 191, 36, 0.45);
+  }
+}
+
+/* Glassmorphism panels */
+.glass-panel {
+  background: rgba(18, 24, 38, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease, box-shadow 0.3s ease;
+  will-change: transform, box-shadow;
+}
+
+.glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.glass-panel-danger {
+  background: rgba(45, 12, 12, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.3);
+}
+
+.glass-panel-warning {
+  background: rgba(38, 26, 12, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+}
+
+/* Station Cards: Smooth Hover Elevation and Soft Luminous Atmospheric Shadow */
+.station-card {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+  will-change: transform, box-shadow;
+}
+
+.station-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 30px -8px rgba(6, 182, 212, 0.16), 0 0 20px rgba(6, 182, 212, 0.1);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.glass-panel-warning.station-card:hover {
+  box-shadow: 0 16px 30px -8px rgba(245, 158, 11, 0.25), 0 0 20px rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.7);
+}
+
+.glass-panel-danger.station-card:hover {
+  box-shadow: 0 16px 30px -8px rgba(239, 68, 68, 0.3), 0 0 22px rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.85);
+}
+
+/* ========================================================
+   EMERGENCY GUIDELINES ACCORDION (SMOOTH CSS GRID EXPAND)
+   ======================================================== */
+.accordion-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.accordion-collapse.expanded {
+  grid-template-rows: 1fr;
+}
+
+.accordion-inner {
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.accordion-collapse.expanded .accordion-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ========================================================
+   WATER LEVEL GAUGE & WAVE ANIMATION
+   ======================================================== */
+.water-gauge-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.water-wave-fill {
+  transition: height 1s cubic-bezier(0.4, 0, 0.2, 1), background 0.5s ease;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  will-change: height;
+  transform: translateZ(0); /* Hardware accelerated */
+}
+
+/* Subtle continuous ripple waves on the top edge of the water fill */
+.water-wave-fill::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 200%;
+  height: 12px;
+  background-repeat: repeat-x;
+  background-size: 80px 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 12' preserveAspectRatio='none'%3E%3Cpath d='M0,6 C20,0 20,12 40,6 C60,0 60,12 80,6 L80,12 L0,12 Z' fill='rgba(255,255,255,0.38)'/%3E%3C/svg%3E");
+  animation: wave-motion-front 3.5s linear infinite;
+  transform: translate3d(0, 0, 0);
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 2;
+}
+
+.water-wave-fill::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 0;
+  width: 200%;
+  height: 14px;
+  background-repeat: repeat-x;
+  background-size: 120px 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 14' preserveAspectRatio='none'%3E%3Cpath d='M0,7 C30,1 30,13 60,7 C90,1 90,13 120,7 L120,14 L0,14 Z' fill='rgba(255,255,255,0.22)'/%3E%3C/svg%3E");
+  animation: wave-motion-back 5.8s linear infinite;
+  transform: translate3d(0, 0, 0);
+  pointer-events: none;
+  opacity: 0.65;
+  z-index: 1;
+}
+
+@keyframes wave-motion-front {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-80px, 0, 0); }
+}
+
+@keyframes wave-motion-back {
+  0% { transform: translate3d(-120px, 0, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* Shimmering surface ripple highlight line */
+.water-surface-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.85), rgba(255,255,255,0.2));
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Threshold marker lines */
+.bank-marker-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #f87171;
+  box-shadow: 0 0 8px #ef4444;
+  z-index: 10;
+}
+
+.bank-marker-label {
+  position: absolute;
+  right: 6px;
+  top: -18px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fca5a5;
+  background: rgba(15, 23, 42, 0.95);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  white-space: nowrap;
+}
+
+.critical-marker-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-top: 2px dashed #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+  z-index: 10;
+}
+
+.critical-marker-label {
+  position: absolute;
+  left: 6px;
+  top: -18px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fef08a;
+  background: rgba(15, 23, 42, 0.95);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(251, 191, 36, 0.6);
+  white-space: nowrap;
+}
+
+/* Distance Pill */
+.distance-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(14, 165, 233, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+/* Realtime live connected pulse */
+.live-pulse {
+  animation: live-pulse-anim 1.8s infinite ease-in-out;
+}
+
+@keyframes live-pulse-anim {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ========================================================
+   INTERACTIVE MAP & CUSTOM MARKERS (LEAFLET)
+   ======================================================== */
+#floodMap {
+  background: #090d16;
+  z-index: 1;
+}
+
+/* Subtle tile adjustment to match dark UI */
+.leaflet-tile {
+  filter: brightness(0.88) contrast(1.1) saturate(0.92);
+}
+
+/* Custom dark popup styling */
+.leaflet-popup-content-wrapper {
+  background: rgba(15, 23, 42, 0.96) !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(14px);
+}
+
+.leaflet-popup-tip {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+}
+
+.leaflet-popup-content {
+  margin: 12px 14px !important;
+  line-height: 1.4 !important;
+  font-family: 'Prompt', sans-serif !important;
+}
+
+.leaflet-container a.leaflet-popup-close-button {
+  color: #94a3b8 !important;
+  padding: 8px 10px 0 0 !important;
+}
+
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: #ffffff !important;
+}
+
+/* User GPS Marker with dual soft radar pulse */
+.user-gps-marker {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  pointer-events: auto;
+}
+
+.user-gps-dot {
+  width: 14px;
+  height: 14px;
+  background: #0284c7;
+  border: 2.5px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 14px #38bdf8;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+}
+
+.user-gps-ring {
+  width: 32px;
+  height: 32px;
+  background: rgba(14, 165, 233, 0.22);
+  border: 1.5px solid rgba(56, 189, 248, 0.75);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: radar-pulse-user 2.4s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.user-gps-ring-delayed {
+  animation-delay: 1.2s;
+}
+
+@keyframes radar-pulse-user {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.95; }
+  65% { opacity: 0.35; }
+  100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+}
+
+/* ========================================================
+   STATION MARKERS & RADAR RIPPLES (LEAFLET)
+   ======================================================== */
+.custom-station-icon {
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+}
+
+.station-pin-wrapper {
+  position: relative;
+  width: 44px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.station-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  color: white;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-family: 'JetBrains Mono', monospace;
+  border: 2px solid white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  position: relative;
+  white-space: nowrap;
+  z-index: 2;
+  will-change: transform;
+}
+
+.station-pin-wrapper:hover .station-pin {
+  transform: scale(1.22) translateY(-3px);
+  z-index: 9999;
+}
+
+/* Normal station: steady and calm, no distracting radar rings */
+.station-pin-normal {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.5);
+}
+
+/* Warning & Emergency Pins */
+.station-pin-warning {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.85);
+}
+
+.station-pin-emergency {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.95);
+}
+
+/* Radar Ripple Rings (Radiating outward smoothly from markers) */
+.station-radar-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.radar-warning {
+  border: 2px solid rgba(245, 158, 11, 0.85);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+  animation: radar-ping-warning 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.radar-emergency {
+  border: 2.5px solid rgba(239, 68, 68, 0.95);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.7);
+  animation: radar-ping-emergency 1.3s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.radar-ring-delayed {
+  animation-delay: 0.65s;
+}
+
+@keyframes radar-ping-warning {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  60% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes radar-ping-emergency {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.7);
+    opacity: 0;
+  }
+}
+
+/* ========================================================
+   MICRO-INTERACTION: REFRESH BUTTON SPIN ANIMATION
+   ======================================================== */
+.spinning-360 {
+  animation: spin-smooth 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes spin-smooth {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================================
+   SLUICE GATE TWIN CARD (ปตร. สองฝั่ง ด้านใน & ด้านนอก)
+   ======================================================== */
+.sluice-gate-pillar {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.08), 0 4px 12px rgba(0, 0, 0, 0.4);
+  min-width: 50px;
+}
+
+.gate-guide-rails {
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.8);
+  border-left: 1px solid rgba(148, 163, 184, 0.4);
+  border-right: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.gate-opening-slab {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sluice-gate-card {
+  background: radial-gradient(circle at 50% 0%, rgba(14, 116, 144, 0.12) 0%, rgba(15, 23, 42, 0.88) 70%);
+}
+
+/* ========================================================
+   BATTERY & MOBILE PERFORMANCE: PREFERS-REDUCED-MOTION
+   ======================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  body.emergency-active {
+    animation: none !important;
+    background-color: #120303 !important;
+  }
+
+  .emergency-banner-flash,
+  .warning-banner-glow,
+  .emergency-border-pulse {
+    animation: none !important;
+  }
+
+  .water-wave-fill::before,
+  .water-wave-fill::after {
+    animation: none !important;
+    opacity: 0.4 !important;
+  }
+
+  .user-gps-ring,
+  .station-radar-ring,
+  .radar-warning,
+  .radar-emergency,
+  .live-pulse,
+  .spinning-360 {
+    animation: none !important;
+    display: none !important;
+  }
+
+  .station-card:hover,
+  .glass-panel:hover,
+  .station-pin:hover,
+  .station-pin-wrapper:hover .station-pin {
+    transform: none !important;
+  }
+}
