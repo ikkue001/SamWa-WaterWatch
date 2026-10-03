@@ -57,6 +57,9 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
+  <!-- Chart.js for 24-Hour Historical Water Trends -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <!-- Preconnect to Esri Map Server (Fast LCP) -->
   <link rel="preconnect" href="https://server.arcgisonline.com">
   <link rel="dns-prefetch" href="https://server.arcgisonline.com">
@@ -526,6 +529,172 @@
     </div>
   </div>
 </section>
+
+    <!-- ================= AI WATER SITUATION ANALYSIS & OFFICIAL NEWS (AI INSIGHTS) ================= -->
+    <section id="aiAnalysisSection" class="rounded-2xl sm:rounded-3xl glass-panel p-4 sm:p-6 border border-slate-800 shadow-xl relative overflow-hidden transition-all duration-300">
+      <!-- Ambient Glow Behind AI Card -->
+      <div class="absolute -top-24 -right-24 w-72 h-72 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+      
+      <!-- AI Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80 relative z-10">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600/30 to-sky-400/30 border border-violet-400/40 text-violet-300 flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="sparkles" class="w-5 h-5 text-sky-300"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-1.5">
+                <span>ระบบ AI วิเคราะห์สถานการณ์น้ำ & ข่าวสารทางการ</span>
+              </h2>
+              <span id="aiModelBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm flex items-center gap-1 font-mono">
+                <i data-lucide="bot" class="w-3 h-3 text-violet-400"></i>
+                <span id="aiModelText">Gemini 1.5 Flash</span>
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">
+              ประเมินความเสี่ยงลุ่มน้ำคลองสามวาและพื้นที่รอยต่อ วิเคราะห์แนวโน้ม 6-12 ชม. ร่วมกับประกาศ กทม. และกรมชลประทาน
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 shrink-0">
+          <span id="aiUpdatedTimeBadge" class="text-[11px] text-slate-400 font-mono hidden sm:inline">แคชผลลัพธ์ 30 นาที</span>
+          <button id="btnRefreshAi" type="button" onclick="loadAiAnalysis(true)" class="min-h-[34px] px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition touch-manipulation shadow-sm" title="วิเคราะห์สถานการณ์น้ำใหม่">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-slate-400"></i>
+            <span>วิเคราะห์ใหม่</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SKELETON LOADING STATE (Prevents CLS) -->
+      <div id="aiLoadingSkeleton" class="py-4 space-y-4 animate-pulse">
+        <div class="h-16 w-full rounded-2xl bg-slate-800/60 border border-slate-800"></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div class="h-32 rounded-2xl bg-slate-800/50 border border-slate-800/60 p-4 space-y-2">
+            <div class="h-4 w-28 rounded bg-slate-700/60"></div>
+            <div class="h-10 w-full rounded bg-slate-700/40"></div>
+          </div>
+          <div class="h-32 rounded-2xl bg-slate-800/50 border border-slate-800/60 p-4 space-y-2">
+            <div class="h-4 w-32 rounded bg-slate-700/60"></div>
+            <div class="h-10 w-full rounded bg-slate-700/40"></div>
+          </div>
+          <div class="h-32 rounded-2xl bg-slate-800/50 border border-slate-800/60 p-4 space-y-2">
+            <div class="h-4 w-24 rounded bg-slate-700/60"></div>
+            <div class="h-10 w-full rounded bg-slate-700/40"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DYNAMIC AI CONTENT (Injected by JS) -->
+      <div id="aiAnalysisContent" class="hidden pt-4 space-y-4 relative z-10">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- ================= 24-HOUR HISTORICAL WATER LEVEL CHART ================= -->
+    <section id="waterHistorySection" class="rounded-2xl sm:rounded-3xl glass-panel p-4 sm:p-6 border border-slate-800 shadow-xl relative overflow-hidden transition-all duration-300">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0 shadow-sm">
+            <i data-lucide="activity" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="text-base sm:text-lg font-black text-white tracking-tight">
+                กราฟระดับน้ำย้อนหลัง 24 ชั่วโมง (24-Hour Trend)
+              </h2>
+              <span id="chartStationBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/40 font-mono">
+                ST-1
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">
+              ติดตามแนวโน้มการขึ้น-ลงของระดับน้ำ เปรียบเทียบกับเกณฑ์วิกฤติและระดับตลิ่ง
+            </p>
+          </div>
+        </div>
+
+        <!-- Trend Indicator Pill -->
+        <div class="flex items-center gap-2 shrink-0">
+          <span id="chartTrendPill" class="px-2.5 py-1 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+            <span id="chartTrendText">แนวโน้มทรงตัว</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Station Selector Tabs (Scrollable on mobile) -->
+      <div class="mt-4">
+        <div class="text-[11px] text-slate-400 font-medium mb-1.5 flex items-center justify-between">
+          <span>เลือกสถานีตรวจวัด:</span>
+          <span class="text-[10px] text-slate-500 font-mono">แตะปุ่มเพื่อสลับดูกราฟ</span>
+        </div>
+        <div id="chartStationButtons" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          <!-- Station tabs generated by JS -->
+        </div>
+      </div>
+
+      <!-- Chart Container (Fixed Aspect / Height for CLS Prevention) -->
+      <div class="mt-4 p-3 sm:p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 relative">
+        <div id="chartLoadingOverlay" class="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-10 hidden rounded-2xl">
+          <div class="flex items-center gap-2 text-sky-400 text-xs font-semibold">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+            <span>กำลังโหลดกราฟ...</span>
+          </div>
+        </div>
+        <div class="w-full relative" style="height: 260px; min-height: 260px;">
+          <canvas id="waterHistoryCanvas" class="w-full h-full"></canvas>
+        </div>
+
+        <!-- Threshold Legend Below Canvas -->
+        <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-center gap-3 sm:gap-6 text-[11px] flex-wrap text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <span class="w-3.5 h-1 rounded bg-sky-400 inline-block shadow-sm"></span>
+            <span>ระดับน้ำ (ม.รทก.)</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3.5 h-0.5 border-b-2 border-dashed border-amber-400 inline-block"></span>
+            <span class="text-amber-300">เกณฑ์วิกฤติ</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="w-3.5 h-0.5 border-b-2 border-dashed border-red-500 inline-block"></span>
+            <span class="text-red-400">ระดับตลิ่ง</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- 24-Hour Statistics Tiles -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3.5">
+        <div class="bg-slate-900/70 rounded-xl p-2.5 border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">ระดับล่าสุด</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <b id="chartStatCurrent" class="text-base sm:text-lg font-black text-white font-mono">--</b>
+            <span class="text-[10px] text-slate-400">ม.รทก.</span>
+          </div>
+        </div>
+        <div class="bg-slate-900/70 rounded-xl p-2.5 border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">สูงสุดใน 24 ชม.</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <b id="chartStatMax" class="text-base sm:text-lg font-black text-amber-300 font-mono">--</b>
+            <span class="text-[10px] text-slate-400">ม.รทก.</span>
+          </div>
+        </div>
+        <div class="bg-slate-900/70 rounded-xl p-2.5 border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">ต่ำสุดใน 24 ชม.</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <b id="chartStatMin" class="text-base sm:text-lg font-black text-emerald-300 font-mono">--</b>
+            <span class="text-[10px] text-slate-400">ม.รทก.</span>
+          </div>
+        </div>
+        <div class="bg-slate-900/70 rounded-xl p-2.5 border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">เปลี่ยนแปลง 24 ชม.</span>
+          <div class="flex items-baseline gap-1 mt-0.5">
+            <b id="chartStatChange" class="text-base sm:text-lg font-black text-sky-300 font-mono">--</b>
+            <span class="text-[10px] text-slate-400">ม.</span>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ================= SECTION 1: SMART CANAL GPS (Nearest Canal Line Upstream -> Downstream) ================= -->
     <section id="smartCanalSectionContainer">
