@@ -20,7 +20,7 @@ html {
 }
 
 body {
-  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--bg-dark);
   color: #f1f5f9;
   min-height: 100vh;
@@ -29,6 +29,24 @@ body {
   overflow-x: clip;   /* Modern standard: clips horizontal overflow without breaking position: sticky */
   transition: background-color 0.4s ease, box-shadow 0.4s ease;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ========================================================
+   CORE WEB VITALS: CLS STABILITY & FIXED DIMENSIONS
+   ======================================================== */
+main {
+  min-height: 100vh;
+}
+
+#alertBannerContainer {
+  min-height: 56px;
+  width: 100%;
+}
+
+#floodMap {
+  width: 100%;
+  height: 380px !important;
+  min-height: 380px !important;
 }
 
 button, a, input, select {

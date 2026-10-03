@@ -57,6 +57,11 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 
+  <!-- Google Fonts Preconnect & Font Stylesheet (font-display: swap) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Kanit:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
   <!-- Leaflet Interactive Map CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -72,7 +77,7 @@
       
       <!-- [ฝั่งซ้าย: แบรนด์และชื่อระบบ (Brand Info)] -->
       <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
-        <img src="/logo.png" alt="น้ำสามวา SamWa WaterWatch Logo" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0 shadow-md shadow-sky-500/20 border border-sky-400/30">
+        <img src="/logo.png" alt="น้ำสามวา SamWa WaterWatch Logo" width="40" height="40" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover shrink-0 shadow-md shadow-sky-500/20 border border-sky-400/30">
         <div class="min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             <h1 class="text-sm sm:text-base md:text-lg font-black tracking-tight text-white flex items-center gap-1.5 truncate">
@@ -123,92 +128,111 @@
     </div>
   </header>
 
-  <!-- ================= TIER 3: EMERGENCY ALERT BANNER (Flashing Red when isOverflow is true) ================= -->
-  <section id="emergencyBanner" class="hidden transition-all duration-300">
-    <div class="emergency-banner-flash text-white shadow-2xl emergency-border-pulse border-y-2 border-red-300">
-      <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-        <!-- Header row: headline and action buttons neatly separated -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/20">
-          <div class="flex items-center gap-3">
-            <div class="p-2.5 bg-white/20 rounded-xl animate-bounce shrink-0">
-              <i data-lucide="siren" class="w-6 h-6 sm:w-7 sm:h-7 text-white"></i>
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded text-[10px] font-black bg-white text-red-700 tracking-wider">
-                  EMERGENCY ALERT
-                </span>
-                <span class="text-xs font-semibold uppercase tracking-wider text-red-100">สถานะฉุกเฉินทันที (🔴) - น้ำล้นตลิ่ง</span>
-              </div>
-              <h2 id="emergencySummaryHeadline" class="text-base sm:text-xl font-black mt-0.5 text-white">
-                🚨 ฉุกเฉิน: น้ำล้นตลิ่งแล้ว!
-              </h2>
-            </div>
-          </div>
+  <!-- ================= TOP ALERT BANNERS CONTAINER (RESERVED SPACE FOR CLS) ================= -->
+  <div id="alertBannerContainer" class="w-full min-h-[56px] relative transition-all duration-300">
 
-          <!-- Quick Action Buttons: Hotline contacts -->
-          <div class="flex items-center gap-2 shrink-0 flex-wrap">
-            <a href="tel:1784" class="px-3 py-1.5 bg-white text-red-700 hover:bg-red-50 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg transition">
-              <i data-lucide="phone-call" class="w-4 h-4"></i>
-              <span>สายด่วน ปภ. 1784</span>
-            </a>
-            <a href="tel:1555" class="px-3 py-1.5 bg-red-950/60 text-white hover:bg-red-900 border border-red-300/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
-              <i data-lucide="phone" class="w-4 h-4"></i>
-              <span>ศูนย์ กทม. 1555</span>
-            </a>
-          </div>
+    <!-- TIER 1 / IDLE: Normal Status Banner (Initial Reserved Space) -->
+    <div id="normalBanner" class="w-full bg-slate-900/90 border-b border-slate-800 text-xs py-3 px-3 sm:px-4 min-h-[56px] flex items-center justify-between transition-opacity duration-300">
+      <div class="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-slate-300">
+          <span class="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span id="normalBannerText" class="font-medium text-slate-300">🟢 สถานการณ์ปกติ: ระดับน้ำทุกจุดตรวจวัดหลักอยู่ในเกณฑ์ควบคุม</span>
         </div>
-
-        <!-- Station Cards Container: Responsive Grid -->
-        <div id="emergencyStationCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
-          <!-- Dynamically populated cards with station name, levels, diff pill, and limits -->
-        </div>
+        <span class="text-[11px] text-slate-500 hidden sm:inline font-mono">เฝ้าระวัง 24 ชั่วโมง</span>
       </div>
     </div>
-  </section>
 
-  <!-- ================= TIER 2: WARNING ALERT BANNER (Amber-Orange when waterLevel >= criticalLevel) ================= -->
-  <section id="warningBanner" class="hidden transition-all duration-300">
-    <div class="warning-banner-glow text-white shadow-xl border-y border-amber-400">
-      <div class="max-w-7xl mx-auto px-4 py-3.5 sm:px-6 lg:px-8">
-        <!-- Header row: headline and action buttons neatly separated -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-300/20">
-          <div class="flex items-center gap-3">
-            <div class="p-2 bg-amber-400/20 rounded-xl text-amber-200 shrink-0">
-              <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-200"></i>
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-900 tracking-wider">
-                  WARNING ALERT
-                </span>
-                <span class="text-xs font-semibold uppercase tracking-wider text-amber-100">สถานะเตือนภัย (🟡/🟠) - เตรียมความพร้อม</span>
+    <!-- ================= TIER 3: EMERGENCY ALERT BANNER (Flashing Red when isOverflow is true) ================= -->
+    <section id="emergencyBanner" class="hidden transition-all duration-300">
+      <div class="emergency-banner-flash text-white shadow-2xl emergency-border-pulse border-y-2 border-red-300">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+          <!-- Header row: headline and action buttons neatly separated -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/20">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 bg-white/20 rounded-xl animate-bounce shrink-0">
+                <i data-lucide="siren" class="w-6 h-6 sm:w-7 sm:h-7 text-white"></i>
               </div>
-              <h3 id="warningSummaryHeadline" class="text-base sm:text-lg font-bold mt-0.5 text-white">
-                ⚠️ เตือนภัย: ระดับน้ำเข้าสู่จุดวิกฤติ ให้เตรียมความพร้อม/ยกของขึ้นที่สูง
-              </h3>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-black bg-white text-red-700 tracking-wider">
+                    EMERGENCY ALERT
+                  </span>
+                  <span class="text-xs font-semibold uppercase tracking-wider text-red-100">สถานะฉุกเฉินทันที (🔴) - น้ำล้นตลิ่ง</span>
+                </div>
+                <h2 id="emergencySummaryHeadline" class="text-base sm:text-xl font-black mt-0.5 text-white">
+                  🚨 ฉุกเฉิน: น้ำล้นตลิ่งแล้ว!
+                </h2>
+              </div>
+            </div>
+
+            <!-- Quick Action Buttons: Hotline contacts -->
+            <div class="flex items-center gap-2 shrink-0 flex-wrap">
+              <a href="tel:1784" class="px-3 py-1.5 bg-white text-red-700 hover:bg-red-50 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg transition">
+                <i data-lucide="phone-call" class="w-4 h-4"></i>
+                <span>สายด่วน ปภ. 1784</span>
+              </a>
+              <a href="tel:1555" class="px-3 py-1.5 bg-red-950/60 text-white hover:bg-red-900 border border-red-300/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                <i data-lucide="phone" class="w-4 h-4"></i>
+                <span>ศูนย์ กทม. 1555</span>
+              </a>
             </div>
           </div>
 
-          <!-- Quick Action Buttons: top right -->
-          <div class="flex items-center gap-2 shrink-0">
-            <a href="tel:1784" class="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-950 border border-amber-300/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition text-amber-200">
-              <i data-lucide="phone-call" class="w-3.5 h-3.5"></i>
-              <span>ปภ. 1784</span>
-            </a>
+          <!-- Station Cards Container: Responsive Grid -->
+          <div id="emergencyStationCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+            <!-- Dynamically populated cards with station name, levels, diff pill, and limits -->
           </div>
-        </div>
-
-        <!-- Station Cards Container: Responsive Grid -->
-        <div id="warningStationCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
-          <!-- Dynamically populated cards with station name, levels, diff pill, and limits -->
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <!-- ================= TIER 2: WARNING ALERT BANNER (Amber-Orange when waterLevel >= criticalLevel) ================= -->
+    <section id="warningBanner" class="hidden transition-all duration-300">
+      <div class="warning-banner-glow text-white shadow-xl border-y border-amber-400">
+        <div class="max-w-7xl mx-auto px-4 py-3.5 sm:px-6 lg:px-8">
+          <!-- Header row: headline and action buttons neatly separated -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-300/20">
+            <div class="flex items-center gap-3">
+              <div class="p-2 bg-amber-400/20 rounded-xl text-amber-200 shrink-0">
+                <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-200"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded text-[10px] font-black bg-amber-200 text-amber-900 tracking-wider">
+                    WARNING ALERT
+                  </span>
+                  <span class="text-xs font-semibold uppercase tracking-wider text-amber-100">สถานะเตือนภัย (🟡/🟠) - เตรียมความพร้อม</span>
+                </div>
+                <h3 id="warningSummaryHeadline" class="text-base sm:text-lg font-bold mt-0.5 text-white">
+                  ⚠️ เตือนภัย: ระดับน้ำเข้าสู่จุดวิกฤติ ให้เตรียมความพร้อม/ยกของขึ้นที่สูง
+                </h3>
+              </div>
+            </div>
+
+            <!-- Quick Action Buttons: top right -->
+            <div class="flex items-center gap-2 shrink-0">
+              <a href="tel:1784" class="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-950 border border-amber-300/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition text-amber-200">
+                <i data-lucide="phone-call" class="w-3.5 h-3.5"></i>
+                <span>ปภ. 1784</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Station Cards Container: Responsive Grid -->
+          <div id="warningStationCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+            <!-- Dynamically populated cards with station name, levels, diff pill, and limits -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
 
   <!-- ================= MAIN CONTENT ================= -->
-  <main class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 flex-1 w-full space-y-5 sm:space-y-6 overflow-hidden">
+  <main class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 flex-1 w-full space-y-5 sm:space-y-6 overflow-hidden min-h-screen" style="min-height: 100vh;">
 
     <!-- ================= FLOOD EMERGENCY GUIDELINES (COLLAPSIBLE / AUTO-EXPAND) ================= -->
     <section id="floodGuidelinesSection" class="rounded-2xl border border-slate-800 bg-slate-900/70 backdrop-blur-md overflow-hidden transition-all duration-300 shadow-lg">
@@ -484,17 +508,137 @@
         </div>
       </div>
 
-      <!-- Map Element: Responsive height (340px on mobile, 460px on tablet, 500px on desktop) -->
-      <div class="relative w-full rounded-2xl overflow-hidden border border-slate-800 shadow-2xl glass-panel">
-        <div id="floodMap" class="w-full h-[340px] sm:h-[460px] lg:h-[500px]"></div>
+      <!-- Map Element: Fixed Height 380px (CLS Prevention) -->
+      <div class="relative w-full rounded-2xl overflow-hidden border border-slate-800 shadow-2xl glass-panel" style="min-height: 380px;">
+        <div id="floodMap" class="w-full" style="height: 380px; min-height: 380px;"></div>
       </div>
     </section>
 
     <!-- ================= SECTION 1: SMART CANAL GPS (Nearest Canal Line Upstream -> Downstream) ================= -->
     <section id="smartCanalSectionContainer">
-      <div class="p-6 sm:p-8 text-center glass-panel rounded-3xl border border-slate-800 text-slate-400">
-        <i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto text-blue-400 mb-2"></i>
-        <span>กำลังเชื่อมต่อ Realtime และคำนวณสายคลองตามตำแหน่ง GPS ของคุณ...</span>
+      <div class="rounded-2xl sm:rounded-3xl glass-panel p-4 sm:p-6 border border-slate-800 relative overflow-hidden animate-pulse">
+        <!-- Section Header Skeleton -->
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800/80 mb-4">
+          <div class="space-y-2">
+            <div class="h-5 w-48 rounded-full bg-slate-800"></div>
+            <div class="h-7 w-64 rounded-lg bg-slate-800"></div>
+            <div class="h-3.5 w-80 max-w-full rounded bg-slate-800/60"></div>
+          </div>
+          <!-- Canal Line Selector Tabs Skeleton -->
+          <div class="flex items-center flex-wrap gap-1.5">
+            <div class="h-10 w-28 rounded-xl bg-slate-800"></div>
+            <div class="h-10 w-32 rounded-xl bg-slate-800"></div>
+            <div class="h-10 w-24 rounded-xl bg-slate-800"></div>
+            <div class="h-10 w-28 rounded-xl bg-slate-800"></div>
+          </div>
+        </div>
+
+        <!-- Flow Sequence Subheader Skeleton -->
+        <div class="mt-2 pt-3 border-t border-slate-800/60">
+          <div class="mb-3 h-9 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center px-3">
+            <div class="h-4 w-48 rounded bg-slate-800"></div>
+          </div>
+
+          <!-- Stations Cards in Flow Order Grid Skeleton -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Skeleton Flow Card 1 -->
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <!-- Skeleton Flow Card 2 -->
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <!-- Skeleton Flow Card 3 -->
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <!-- Skeleton Flow Card 4 -->
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -518,8 +662,162 @@
       </div>
 
       <!-- 4 Pinned Cards Grid: 1 col on mobile, 2 cols on tablet, 4 cols on desktop -->
-      <div id="pinnedPriorityContainer" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
-        <!-- Rendered dynamically by app.js -->
+      <div id="pinnedPriorityContainer" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5 animate-pulse">
+        <!-- Skeleton Pinned Card 1 -->
+        <div class="station-card rounded-3xl glass-panel p-5 border border-slate-800/80 flex flex-col justify-between relative overflow-hidden min-h-[420px] bg-slate-900/40">
+          <div>
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+              <div class="space-y-2 flex-1">
+                <div class="flex items-center gap-2">
+                  <div class="h-5 w-14 rounded-full bg-slate-800"></div>
+                  <div class="h-5 w-24 rounded-full bg-slate-800/60"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+              </div>
+              <div class="h-6 w-16 rounded-full bg-slate-800/80 shrink-0"></div>
+            </div>
+            <div class="grid grid-cols-12 gap-4 my-4 items-center">
+              <div class="col-span-7 space-y-2">
+                <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800 space-y-2">
+                  <div class="h-3 w-20 rounded bg-slate-800"></div>
+                  <div class="h-8 w-28 rounded bg-slate-800"></div>
+                  <div class="h-3 w-24 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                </div>
+              </div>
+              <div class="col-span-5 flex flex-col items-center">
+                <div class="w-full h-36 rounded-xl bg-slate-900/80 border border-slate-700/60 relative flex flex-col justify-end p-2">
+                  <div class="w-full h-1/2 rounded-lg bg-slate-800/60"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <div class="h-3 w-24 rounded bg-slate-800"></div>
+            <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+          </div>
+        </div>
+
+        <!-- Skeleton Pinned Card 2 -->
+        <div class="station-card rounded-3xl glass-panel p-5 border border-slate-800/80 flex flex-col justify-between relative overflow-hidden min-h-[420px] bg-slate-900/40">
+          <div>
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+              <div class="space-y-2 flex-1">
+                <div class="flex items-center gap-2">
+                  <div class="h-5 w-14 rounded-full bg-slate-800"></div>
+                  <div class="h-5 w-24 rounded-full bg-slate-800/60"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+              </div>
+              <div class="h-6 w-16 rounded-full bg-slate-800/80 shrink-0"></div>
+            </div>
+            <div class="grid grid-cols-12 gap-4 my-4 items-center">
+              <div class="col-span-7 space-y-2">
+                <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800 space-y-2">
+                  <div class="h-3 w-20 rounded bg-slate-800"></div>
+                  <div class="h-8 w-28 rounded bg-slate-800"></div>
+                  <div class="h-3 w-24 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                </div>
+              </div>
+              <div class="col-span-5 flex flex-col items-center">
+                <div class="w-full h-36 rounded-xl bg-slate-900/80 border border-slate-700/60 relative flex flex-col justify-end p-2">
+                  <div class="w-full h-1/2 rounded-lg bg-slate-800/60"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <div class="h-3 w-24 rounded bg-slate-800"></div>
+            <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+          </div>
+        </div>
+
+        <!-- Skeleton Pinned Card 3 -->
+        <div class="station-card rounded-3xl glass-panel p-5 border border-slate-800/80 flex flex-col justify-between relative overflow-hidden min-h-[420px] bg-slate-900/40">
+          <div>
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+              <div class="space-y-2 flex-1">
+                <div class="flex items-center gap-2">
+                  <div class="h-5 w-14 rounded-full bg-slate-800"></div>
+                  <div class="h-5 w-24 rounded-full bg-slate-800/60"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+              </div>
+              <div class="h-6 w-16 rounded-full bg-slate-800/80 shrink-0"></div>
+            </div>
+            <div class="grid grid-cols-12 gap-4 my-4 items-center">
+              <div class="col-span-7 space-y-2">
+                <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800 space-y-2">
+                  <div class="h-3 w-20 rounded bg-slate-800"></div>
+                  <div class="h-8 w-28 rounded bg-slate-800"></div>
+                  <div class="h-3 w-24 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                </div>
+              </div>
+              <div class="col-span-5 flex flex-col items-center">
+                <div class="w-full h-36 rounded-xl bg-slate-900/80 border border-slate-700/60 relative flex flex-col justify-end p-2">
+                  <div class="w-full h-1/2 rounded-lg bg-slate-800/60"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <div class="h-3 w-24 rounded bg-slate-800"></div>
+            <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+          </div>
+        </div>
+
+        <!-- Skeleton Pinned Card 4 -->
+        <div class="station-card rounded-3xl glass-panel p-5 border border-slate-800/80 flex flex-col justify-between relative overflow-hidden min-h-[420px] bg-slate-900/40">
+          <div>
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+              <div class="space-y-2 flex-1">
+                <div class="flex items-center gap-2">
+                  <div class="h-5 w-14 rounded-full bg-slate-800"></div>
+                  <div class="h-5 w-24 rounded-full bg-slate-800/60"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+              </div>
+              <div class="h-6 w-16 rounded-full bg-slate-800/80 shrink-0"></div>
+            </div>
+            <div class="grid grid-cols-12 gap-4 my-4 items-center">
+              <div class="col-span-7 space-y-2">
+                <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800 space-y-2">
+                  <div class="h-3 w-20 rounded bg-slate-800"></div>
+                  <div class="h-8 w-28 rounded bg-slate-800"></div>
+                  <div class="h-3 w-24 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                  <div class="h-8 rounded-lg bg-slate-900/50 border border-slate-800/80"></div>
+                </div>
+              </div>
+              <div class="col-span-5 flex flex-col items-center">
+                <div class="w-full h-36 rounded-xl bg-slate-900/80 border border-slate-700/60 relative flex flex-col justify-end p-2">
+                  <div class="w-full h-1/2 rounded-lg bg-slate-800/60"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <div class="h-3 w-24 rounded bg-slate-800"></div>
+            <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -544,7 +842,193 @@
 
       <!-- All Canals Grid -->
       <div id="allCanalsGrid">
-        <!-- Rendered dynamically by app.js -->
+        <!-- Suren Canal Cards Skeleton -->
+        <div class="mb-6">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="p-1 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+              <i data-lucide="waves" class="w-4 h-4"></i>
+            </span>
+            <h3 class="text-base font-bold text-white">แนวคลองพระยาสุเรนทร์ (ID 126, 125, 124, 127)</h3>
+            <span class="text-xs text-slate-500 ml-auto">เรียงจากต้นน้ำสู่ปลายน้ำ</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+            <!-- 4 Skeleton Flow Cards -->
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Bangkok Gate & Others Skeleton -->
+        <div>
+          <div class="flex items-center gap-2 mb-3">
+            <span class="p-1 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">
+              <i data-lucide="building-2" class="w-4 h-4"></i>
+            </span>
+            <h3 class="text-base font-bold text-white">จุดวัดหลัก กทม. & ระบบประตูระบายน้ำ</h3>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
+            <!-- 3 Skeleton Flow Cards -->
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+            <div class="station-card rounded-2xl glass-panel p-4 border border-slate-800/80 flex flex-col justify-between min-h-[420px] bg-slate-900/40">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between gap-1">
+                  <div class="h-5 w-12 rounded-md bg-slate-800"></div>
+                  <div class="h-5 w-14 rounded bg-slate-800"></div>
+                </div>
+                <div class="h-5 w-3/4 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800/60"></div>
+                <div class="h-20 rounded-xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                  <div class="h-7 w-24 rounded bg-slate-800"></div>
+                  <div class="h-3 w-28 rounded bg-slate-800/60"></div>
+                </div>
+                <div class="w-full h-24 rounded-lg bg-slate-900/80 border border-slate-700/60"></div>
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                  <div class="h-7 rounded bg-slate-900/60 border border-slate-800"></div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                <div class="h-3 w-16 rounded bg-slate-800"></div>
+                <div class="h-8 w-20 rounded-lg bg-slate-800"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

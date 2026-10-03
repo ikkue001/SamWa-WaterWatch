@@ -976,6 +976,7 @@ function getTargetAlertReason(station) {
  * Controls top Emergency / Warning banner display (Visual alerts only, no audio).
  */
 function handleTwoTierAlerts() {
+  const normalBanner = document.getElementById('normalBanner');
   const emergencyBanner = document.getElementById('emergencyBanner');
   const emergencyStationCards = document.getElementById('emergencyStationCards');
   const emergencySummaryHeadline = document.getElementById('emergencySummaryHeadline');
@@ -992,6 +993,7 @@ function handleTwoTierAlerts() {
     // ----------------------------------------------------
     // TIER 3: EMERGENCY (🔴 น้ำล้นตลิ่งที่จุดเป้าหมาย - Visual Alert)
     // ----------------------------------------------------
+    if (normalBanner) normalBanner.classList.add('hidden');
     if (emergencyBanner) {
       emergencyBanner.classList.remove('hidden');
       if (emergencySummaryHeadline) {
@@ -1014,6 +1016,7 @@ function handleTwoTierAlerts() {
     // TIER 2: WARNING (🟡/🟠 เตือนภัยวิกฤติที่จุดเป้าหมาย - Visual Alert)
     // ----------------------------------------------------
     document.body.classList.remove('emergency-active');
+    if (normalBanner) normalBanner.classList.add('hidden');
     if (emergencyBanner) emergencyBanner.classList.add('hidden');
 
     if (warningBanner) {
@@ -1036,6 +1039,7 @@ function handleTwoTierAlerts() {
     document.body.classList.remove('emergency-active');
     if (emergencyBanner) emergencyBanner.classList.add('hidden');
     if (warningBanner) warningBanner.classList.add('hidden');
+    if (normalBanner) normalBanner.classList.remove('hidden');
 
     // Normal guidelines state (collapsed by default)
     updateGuidelinesAutoExpand(false, false);
