@@ -629,11 +629,11 @@ function initLeafletMap() {
     if (leafletMap) leafletMap.invalidateSize();
   });
 
-  // CartoDB Dark Matter Tile Layer (Global High-Speed Edge CDN, Dark Theme, Fast LCP)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
-    maxZoom: 20,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
+  // Esri World Dark Gray Canvas Tile Layer (100% Free, No API Key required)
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+    maxZoom: 16,
+    subdomains: ['server', 'services']
   }).addTo(leafletMap);
 
   // Map Header Buttons
