@@ -385,8 +385,8 @@ function getProcessedStations() {
       s.flowOrder = canonical.flowOrder;
       s.isPinned = canonical.isPinned;
       s.canal = canonical.canal;
-      s.url = canonical.url;
-      s.sourceUrl = canonical.url || canonical.sourceUrl;
+      s.url = canonical.url || canonical.sourceUrl || s.url;
+      s.sourceUrl = canonical.sourceUrl || canonical.url || s.sourceUrl;
     }
 
     // Dynamic Staleness evaluation (60-minute threshold or missing/invalid values)
@@ -413,8 +413,9 @@ function getProcessedSummaryPayload() {
     return numA - numB;
   });
 
-  const hasEmergency = stations.some(s => s.isOverflow);
-  const hasWarning = !hasEmergency && stations.some(s => s.isWarning);
+  // Outdated / stale stations must not trigger false alarms
+  const hasEmergency = stations.some(s => s.isOverflow && !s.isStale);
+  const hasWarning = !hasEmergency && stations.some(s => s.isWarning && !s.isStale);
   const alertLevel = hasEmergency ? 'EMERGENCY' : (hasWarning ? 'WARNING' : 'NORMAL');
 
   return {

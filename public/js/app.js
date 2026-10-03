@@ -58,7 +58,8 @@ const CANONICAL_PINNED_STATIONS = [
     bankLevel: 2.71,
     criticalLevel: 2.41,
     lat: 13.9416,
-    lng: 100.77499
+    lng: 100.77499,
+    sourceUrl: 'https://pathumthani.thaiwater.net/wl#close'
   },
   {
     id: 'bma_wf_k0801',
@@ -69,7 +70,8 @@ const CANONICAL_PINNED_STATIONS = [
     bankLevel: 2.0,
     criticalLevel: 1.8,
     lat: 13.9378,
-    lng: 100.7706
+    lng: 100.7706,
+    sourceUrl: 'https://bmawaterflow.bangkok.go.th/map'
   },
   {
     id: 'bma_wf_khw01',
@@ -80,7 +82,8 @@ const CANONICAL_PINNED_STATIONS = [
     bankLevel: 2.3,
     criticalLevel: 2.0,
     lat: 13.93354,
-    lng: 100.7506
+    lng: 100.7506,
+    sourceUrl: 'https://bmawaterflow.bangkok.go.th/map'
   },
   {
     id: 'bma_wf_swa02',
@@ -91,9 +94,35 @@ const CANONICAL_PINNED_STATIONS = [
     bankLevel: 2.0,
     criticalLevel: 1.8,
     lat: 13.92929,
-    lng: 100.7259
+    lng: 100.7259,
+    sourceUrl: 'https://bmawaterflow.bangkok.go.th/map'
   }
 ];
+
+/**
+ * Returns canonical or fallback official source URL for any station
+ */
+function getStationSourceUrl(station) {
+  if (!station) return 'https://dds.bangkok.go.th';
+  if (station.sourceUrl) return station.sourceUrl;
+  if (station.url) return station.url;
+
+  const id = station.id || '';
+  const numId = station.stationId || (id.startsWith('bma_weather_') ? id.replace('bma_weather_', '') : null);
+  if (numId && !isNaN(parseInt(numId, 10))) {
+    return `https://weather.bangkok.go.th/water/StationDetail?id=${numId}`;
+  }
+
+  if (station.source === 'ThaiWater' || id === 'thaiwater_k8' || id.includes('thaiwater')) {
+    return 'https://pathumthani.thaiwater.net/wl#close';
+  }
+
+  if (station.source === 'BMA Waterflow' || id.startsWith('bma_wf_')) {
+    return 'https://bmawaterflow.bangkok.go.th/map';
+  }
+
+  return 'https://dds.bangkok.go.th';
+}
 
 function formatWaterLevel(val) {
   if (val === null || val === undefined || val === '') return '--';
@@ -610,6 +639,17 @@ function updateExistingCardsIfPresent(stations) {
         }
       });
 
+      // Update source link and styling
+      const sourceUrl = getStationSourceUrl(station);
+      document.querySelectorAll(`[data-station-source-link="${station.id}"]`).forEach(link => {
+        link.href = sourceUrl;
+        if (isStale) {
+          link.className = 'px-2.5 py-1 min-h-[36px] rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm flex items-center gap-1 transition touch-manipulation text-[11px]';
+        } else {
+          link.className = 'px-2.5 py-1 min-h-[36px] rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium flex items-center gap-1 transition touch-manipulation text-[11px]';
+        }
+      });
+
       // Update distance tag
       document.querySelectorAll(`[data-station-dist="${station.id}"]`).forEach(el => {
         if (station.distanceText) {
@@ -1086,26 +1126,27 @@ function updateMapMarkers() {
     let statusColorClass = 'text-emerald-400';
     let radarRingsHtml = '';
 
-    if (isDanger) {
+    if (station.isStale) {
+      pinClass = 'station-pin-stale';
+      statusLabel = '⚪ ข้อมูลไม่อัปเดต';
+      statusColorClass = 'text-slate-400';
+      radarRingsHtml = ''; // Disable radar ping animations completely for stale stations
+    } else if (isDanger) {
       pinClass = 'station-pin-emergency';
       statusLabel = station.isGate && station.alertBadgeText ? station.alertBadgeText : '🚨 ล้นตลิ่ง';
       statusColorClass = 'text-red-400';
-      if (!station.isStale) {
-        radarRingsHtml = `
-          <div class="station-radar-ring radar-emergency"></div>
-          <div class="station-radar-ring radar-emergency radar-ring-delayed"></div>
-        `;
-      }
+      radarRingsHtml = `
+        <div class="station-radar-ring radar-emergency"></div>
+        <div class="station-radar-ring radar-emergency radar-ring-delayed"></div>
+      `;
     } else if (isWarning) {
       pinClass = 'station-pin-warning';
       statusLabel = station.isGate && station.alertBadgeText ? station.alertBadgeText : '⚠️ วิกฤติ';
       statusColorClass = 'text-amber-400';
-      if (!station.isStale) {
-        radarRingsHtml = `
-          <div class="station-radar-ring radar-warning"></div>
-          <div class="station-radar-ring radar-warning radar-ring-delayed"></div>
-        `;
-      }
+      radarRingsHtml = `
+        <div class="station-radar-ring radar-warning"></div>
+        <div class="station-radar-ring radar-warning radar-ring-delayed"></div>
+      `;
     }
 
     // Unique Station Badge Code (ST-1 through ST-9)
@@ -1133,6 +1174,8 @@ function updateMapMarkers() {
     const distText = station.distanceText
       ? `<div class="text-xs text-sky-400 mt-1.5 font-semibold flex items-center gap-1"><i data-lucide="navigation" class="w-3.5 h-3.5"></i> ${station.distanceText}</div>`
       : `<div class="text-xs text-slate-400 mt-1.5 flex items-center gap-1"><i data-lucide="navigation" class="w-3.5 h-3.5"></i> ยังไม่ได้ระบุพิกัด GPS</div>`;
+
+    const sourceUrl = getStationSourceUrl(station);
 
     let bodyPopupHtml = '';
     if (station.isGate && station.inside && station.outside) {
@@ -1167,6 +1210,13 @@ function updateMapMarkers() {
               <b class="font-bold text-white font-mono">${station.gateOpening ? `${station.gateOpening.toFixed(2)} ม.` : '0.43 ม.'}</b>
             </div>
           </div>
+          <!-- Official Source Link -->
+          <div class="mt-2 pt-1.5 border-t border-white/10 text-center">
+            <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="text-[11px] ${station.isStale ? 'text-amber-400 font-bold hover:text-amber-300' : 'text-sky-400 hover:text-sky-300 font-semibold'} inline-flex items-center gap-1 transition">
+              <span>🌐 เปิดหน้าเว็บทางการสถานีนี้</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+          </div>
         </div>
 
         <!-- Limits for both sides -->
@@ -1196,6 +1246,13 @@ function updateMapMarkers() {
           </div>
           <div class="text-[11px] font-semibold mt-0.5 ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')}">
             ${station.diffText || ''}
+          </div>
+          <!-- Official Source Link -->
+          <div class="mt-2 pt-1.5 border-t border-white/10 text-center">
+            <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="text-[11px] ${station.isStale ? 'text-amber-400 font-bold hover:text-amber-300' : 'text-sky-400 hover:text-sky-300 font-semibold'} inline-flex items-center gap-1 transition">
+              <span>🌐 เปิดหน้าเว็บทางการสถานีนี้</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
           </div>
         </div>
 
@@ -1234,10 +1291,17 @@ function updateMapMarkers() {
 
         <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
           <span>เวลา: <b class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : ''}">${station.updatedAt}</b> ${station.isStale && station.staleText ? `<span class="text-[10px] text-amber-400/90">(${station.staleText})</span>` : ''}</span>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1">
-            <span>นำทาง</span>
-            <i data-lucide="external-link" class="w-3 h-3"></i>
-          </a>
+          <div class="flex items-center gap-2">
+            <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="${station.isStale ? 'text-amber-300 hover:text-amber-200' : 'text-sky-400 hover:text-sky-300'} font-semibold flex items-center gap-1">
+              <span>ต้นทาง</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+            <span class="text-white/20">|</span>
+            <a href="https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1">
+              <span>นำทาง</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+          </div>
         </div>
       </div>
     `;
@@ -1518,38 +1582,81 @@ function getTargetAlertReason(station) {
  */
 function handleTwoTierAlerts() {
   const normalBanner = document.getElementById('normalBanner');
+  const normalBannerText = document.getElementById('normalBannerText');
+  const normalStaleBadge = document.getElementById('normalStaleBadge');
+
   const emergencyBanner = document.getElementById('emergencyBanner');
   const emergencyStationCards = document.getElementById('emergencyStationCards');
   const emergencyOutsideSection = document.getElementById('emergencyOutsideSection');
   const emergencySummaryHeadline = document.getElementById('emergencySummaryHeadline');
+  const emergencyStaleBadge = document.getElementById('emergencyStaleBadge');
 
   const warningBanner = document.getElementById('warningBanner');
   const warningStationCards = document.getElementById('warningStationCards');
   const warningOutsideSection = document.getElementById('warningOutsideSection');
   const warningSummaryHeadline = document.getElementById('warningSummaryHeadline');
+  const warningStaleBadge = document.getElementById('warningStaleBadge');
 
-  // Filter ALL overflow (Tier 3: Emergency) stations in the system
-  const overflowAll = appState.stations.filter(s => isStationOverflow(s));
-  const nearbyOverflow = overflowAll
+  // Filter ALL overflow (Tier 3: Emergency) stations in the system (excluding stale stations to prevent false alarms)
+  const liveOverflowAll = appState.stations.filter(s => isStationOverflow(s) && !s.isStale);
+  const nearbyOverflow = liveOverflowAll
     .filter(s => s.distanceKm !== null && s.distanceKm !== undefined && s.distanceKm <= 5.0)
     .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
-  const outsideOverflow = overflowAll
+  const outsideOverflow = liveOverflowAll
     .filter(s => s.distanceKm === null || s.distanceKm === undefined || s.distanceKm > 5.0)
     .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
 
-  // Filter ALL critical (Tier 2: Warning) stations in the system
-  // (s.isCritical || s.isOverflow || s.status === 'warning' || s.status === 'danger' || waterLevel >= criticalLevel)
-  const criticalAll = appState.stations.filter(s => isStationCritical(s) && !isStationOverflow(s));
-  const nearbyCritical = criticalAll
+  // Filter ALL critical (Tier 2: Warning) stations in the system (excluding stale stations to prevent false alarms)
+  const liveCriticalAll = appState.stations.filter(s => isStationCritical(s) && !isStationOverflow(s) && !s.isStale);
+  const nearbyCritical = liveCriticalAll
     .filter(s => s.distanceKm !== null && s.distanceKm !== undefined && s.distanceKm <= 5.0)
     .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
-  const outsideCritical = criticalAll
+  const outsideCritical = liveCriticalAll
     .filter(s => s.distanceKm === null || s.distanceKm === undefined || s.distanceKm > 5.0)
     .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
 
-  if (overflowAll.length > 0) {
+  // Stale stations count across the entire system
+  const staleStations = appState.stations.filter(s => s.isStale);
+  const staleCount = staleStations.length;
+  const staleBadgeHtml = `⚠️ มี ${staleCount} สถานีที่เซนเซอร์หยุดส่งข้อมูล`;
+
+  // Update stale badges on all banners
+  if (emergencyStaleBadge) {
+    if (staleCount > 0) {
+      emergencyStaleBadge.textContent = staleBadgeHtml;
+      emergencyStaleBadge.classList.remove('hidden');
+    } else {
+      emergencyStaleBadge.classList.add('hidden');
+    }
+  }
+
+  if (warningStaleBadge) {
+    if (staleCount > 0) {
+      warningStaleBadge.textContent = staleBadgeHtml;
+      warningStaleBadge.classList.remove('hidden');
+    } else {
+      warningStaleBadge.classList.add('hidden');
+    }
+  }
+
+  if (normalStaleBadge) {
+    if (staleCount > 0) {
+      normalStaleBadge.textContent = staleBadgeHtml;
+      normalStaleBadge.classList.remove('hidden');
+      if (normalBannerText) {
+        normalBannerText.textContent = '🟢 สถานการณ์ปกติ: ระดับน้ำสถานีที่ส่งข้อมูลอยู่ในเกณฑ์ควบคุม';
+      }
+    } else {
+      normalStaleBadge.classList.add('hidden');
+      if (normalBannerText) {
+        normalBannerText.textContent = '🟢 สถานการณ์ปกติ: ระดับน้ำทุกจุดตรวจวัดหลักอยู่ในเกณฑ์ควบคุม';
+      }
+    }
+  }
+
+  if (liveOverflowAll.length > 0) {
     // ----------------------------------------------------
-    // TIER 3: EMERGENCY (🔴 ตรวจพบสถานีน้ำล้นตลิ่ง)
+    // TIER 3: EMERGENCY (🔴 ตรวจพบสถานีน้ำล้นตลิ่งสดใหม่)
     // ----------------------------------------------------
     if (normalBanner) normalBanner.classList.add('hidden');
     if (warningBanner) warningBanner.classList.add('hidden');
@@ -1558,9 +1665,9 @@ function handleTwoTierAlerts() {
 
       if (emergencySummaryHeadline) {
         if (nearbyOverflow.length > 0) {
-          emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${nearbyOverflow.length} สถานีใกล้ตัวคุณ (และ ${overflowAll.length} สถานีในพื้นที่) น้ำล้นตลิ่งแล้ว!`;
+          emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${nearbyOverflow.length} สถานีใกล้ตัวคุณ (และ ${liveOverflowAll.length} สถานีในพื้นที่) น้ำล้นตลิ่งแล้ว!`;
         } else {
-          emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${overflowAll.length} สถานีในพื้นที่น้ำล้นตลิ่งแล้ว! (อยู่นอกรัศมี 5 กม. ของคุณ)`;
+          emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${liveOverflowAll.length} สถานีในพื้นที่น้ำล้นตลิ่งแล้ว! (อยู่นอกรัศมี 5 กม. ของคุณ)`;
         }
       }
 
@@ -1595,9 +1702,9 @@ function handleTwoTierAlerts() {
     document.body.classList.add('emergency-active');
     updateGuidelinesAutoExpand(true, false);
 
-  } else if (criticalAll.length > 0) {
+  } else if (liveCriticalAll.length > 0) {
     // ----------------------------------------------------
-    // TIER 2: WARNING (🟡/🟠 ตรวจพบสถานีเข้าสู่เกณฑ์วิกฤติ)
+    // TIER 2: WARNING (🟡/🟠 ตรวจพบสถานีเข้าสู่เกณฑ์วิกฤติสดใหม่)
     // ----------------------------------------------------
     document.body.classList.remove('emergency-active');
     if (normalBanner) normalBanner.classList.add('hidden');
@@ -1608,9 +1715,9 @@ function handleTwoTierAlerts() {
 
       if (warningSummaryHeadline) {
         if (nearbyCritical.length > 0) {
-          warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${nearbyCritical.length} สถานีใกล้ตัวคุณ (และ ${criticalAll.length} สถานีในพื้นที่) เข้าสู่เกณฑ์วิกฤติ`;
+          warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${nearbyCritical.length} สถานีใกล้ตัวคุณ (และ ${liveCriticalAll.length} สถานีในพื้นที่) เข้าสู่เกณฑ์วิกฤติ`;
         } else {
-          warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${criticalAll.length} สถานีในพื้นที่เข้าสู่เกณฑ์วิกฤติ (อยู่นอกรัศมี 5 กม. ของคุณ)`;
+          warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${liveCriticalAll.length} สถานีในพื้นที่เข้าสู่เกณฑ์วิกฤติ (อยู่นอกรัศมี 5 กม. ของคุณ)`;
         }
       }
 
@@ -1855,8 +1962,12 @@ function renderAlertStationCards(stations, tier) {
 
           <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
             <span>เวลา: <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''}">${s.updatedAt}</b> ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 ml-1">(${s.staleText})</span>` : ''}</span>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               ${distTag}
+              <a href="${getStationSourceUrl(s)}" data-station-source-link="${s.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="min-h-[36px] px-2.5 py-1 rounded-lg ${s.isStale ? 'bg-amber-400 text-amber-950 font-bold border border-amber-300 shadow-sm' : 'bg-white/20 hover:bg-white/30 text-white font-bold'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
+                <span>🌐 ตรวจสอบต้นทาง</span>
+                <i data-lucide="external-link" class="w-3 h-3"></i>
+              </a>
               <button onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 transition touch-manipulation" title="ดูตำแหน่งบนแผนที่">
                 <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
                 <span>แผนที่</span>
@@ -1944,8 +2055,12 @@ function renderAlertStationCards(stations, tier) {
 
         <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
           <span>เวลา: <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''}">${s.updatedAt}</b> ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 ml-1">(${s.staleText})</span>` : ''}</span>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             ${distTag}
+            <a href="${getStationSourceUrl(s)}" data-station-source-link="${s.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="min-h-[36px] px-2.5 py-1 rounded-lg ${s.isStale ? 'bg-amber-400 text-amber-950 font-bold border border-amber-300 shadow-sm' : 'bg-white/20 hover:bg-white/30 text-white font-bold'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
+              <span>🌐 ตรวจสอบต้นทาง</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
             <button onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 transition touch-manipulation" title="ดูตำแหน่งบนแผนที่">
               <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
               <span>แผนที่</span>
@@ -2299,7 +2414,11 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
       <!-- Card Footer -->
       <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
         <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <a href="${getStationSourceUrl(station)}" data-station-source-link="${station.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[36px] rounded-lg ${station.isStale ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
+            <span>🌐 ตรวจสอบต้นทาง</span>
+            <i data-lucide="external-link" class="w-3 h-3"></i>
+          </a>
           <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="คลิกเพื่อซูมดูตำแหน่งบนแผนที่">
             <i data-lucide="map-pin" class="w-3 h-3 text-sky-400"></i>
             <span>แผนที่</span>
@@ -2563,7 +2682,11 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
       <!-- Card Footer -->
       <div class="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
         <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <a href="${getStationSourceUrl(station)}" data-station-source-link="${station.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[36px] rounded-lg ${station.isStale ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
+            <span>🌐 ตรวจสอบต้นทาง</span>
+            <i data-lucide="external-link" class="w-3 h-3"></i>
+          </a>
           <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="คลิกเพื่อซูมดูตำแหน่งบนแผนที่">
             <i data-lucide="map-pin" class="w-3 h-3 text-sky-400"></i>
             <span>แผนที่</span>
@@ -2725,7 +2848,11 @@ function renderPinnedPriorityCard(station, canon, idx) {
         <!-- Card Footer -->
         <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
           <span>เวลา: <b data-station-time="${canon.id}" class="${isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${updateTime}</b> <span data-station-stale-text="${canon.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${isStale && staleText ? '' : 'hidden'}">(${staleText})</span></span>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            <a href="${getStationSourceUrl(station || canon)}" data-station-source-link="${canon.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 min-h-[36px] rounded-lg ${isStale ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
+              <span>🌐 ตรวจสอบต้นทาง</span>
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
             <button onclick="event.stopPropagation(); focusStationOnMap('${canon.id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
               <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
               <span>ดูบนแผนที่</span>
@@ -2831,7 +2958,11 @@ function renderFallbackPinnedCard(canon, idx) {
 
       <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
         <span>เวลา: <b data-station-time="${id}" class="text-slate-300 font-mono">-</b></span>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <a href="${getStationSourceUrl(canon)}" data-station-source-link="${id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
+            <span>🌐 ตรวจสอบต้นทาง</span>
+            <i data-lucide="external-link" class="w-3 h-3"></i>
+          </a>
           <button onclick="event.stopPropagation(); focusStationOnMap('${id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
             <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
             <span>ดูบนแผนที่</span>
