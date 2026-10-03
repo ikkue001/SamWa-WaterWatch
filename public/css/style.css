@@ -696,3 +696,14 @@ body.emergency-active {
     transform: none !important;
   }
 }
+
+/* ========================================================
+   UTILITIES: NO-SCROLLBAR (Mobile Header overflow-x-auto)
+   ======================================================== */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

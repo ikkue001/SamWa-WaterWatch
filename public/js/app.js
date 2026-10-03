@@ -44,6 +44,63 @@ const CANAL_GROUPS_META = {
   }
 };
 
+/**
+ * Canonical Pinned Priority Stations (ST-1 to ST-4)
+ * Guaranteed fallback data so Section 2 cards never crash or get stuck on 'กำลังโหลด...'
+ */
+const CANONICAL_PINNED_STATIONS = [
+  {
+    id: 'thaiwater_k8',
+    stCode: 'ST-1',
+    stationCode: 'K.8',
+    name: 'คลองหกวา ลำลูกกา คลอง 8',
+    location: 'ต.ลำลูกกา อ.ลำลูกกา จ.ปทุมธานี',
+    bankLevel: 2.71,
+    criticalLevel: 2.41,
+    lat: 13.9416,
+    lng: 100.77499
+  },
+  {
+    id: 'bma_wf_k0801',
+    stCode: 'ST-2',
+    stationCode: 'WL.K08.01',
+    name: 'ปตร.คลองแปด ตอนซอย อบจ.ปทุมธานี 2006',
+    location: 'ปตร.คลองแปดสายกลาง ปทุมธานี-กทม.',
+    bankLevel: 2.0,
+    criticalLevel: 1.8,
+    lat: 13.9378,
+    lng: 100.7706
+  },
+  {
+    id: 'bma_wf_khw01',
+    stCode: 'ST-3',
+    stationCode: 'WL.KHW.01',
+    name: 'สถานีสูบน้ำกลางคลองหกวา ตอนถนนนิมิตใหม่',
+    location: 'ถนนนิมิตใหม่ คลองสามวา',
+    bankLevel: 2.3,
+    criticalLevel: 2.0,
+    lat: 13.93354,
+    lng: 100.7506
+  },
+  {
+    id: 'bma_wf_swa02',
+    stCode: 'ST-4',
+    stationCode: 'WL.SWA.02',
+    name: 'คลองสามวา ตอนถนนเทศบาลลำลูกกา 1',
+    location: 'รอยต่อลำลูกกา - คลองสามวา',
+    bankLevel: 2.0,
+    criticalLevel: 1.8,
+    lat: 13.92929,
+    lng: 100.7259
+  }
+];
+
+function formatWaterLevel(val) {
+  if (val === null || val === undefined || val === '') return '--';
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  return isNaN(num) ? '--' : num.toFixed(2);
+}
+
 let appState = {
   hasEmergency: false,
   hasWarning: false,
@@ -284,24 +341,23 @@ function updateRealtimeBadge(status) {
   if (!badge) return;
 
   if (status === 'connected' || status === 'edge_live') {
-    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[36px] sm:min-h-[38px] rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0';
+    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0 whitespace-nowrap';
     badge.innerHTML = `
-      <span class="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
+      <span class="relative flex h-2 w-2 items-center justify-center shrink-0">
         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-        <span class="animate-pulse relative inline-flex rounded-full h-2 w-2 bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
+        <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]"></span>
       </span>
-      <span class="hidden sm:inline font-medium">${status === 'edge_live' ? 'Edge Live (CDN)' : 'Live Connected'}</span>
-      <span class="sm:hidden font-medium">Live</span>
+      <span class="font-medium">${status === 'edge_live' ? 'Edge Live' : 'Live'}</span>
     `;
   } else if (status === 'connecting') {
-    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[36px] sm:min-h-[38px] rounded-xl text-xs font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 shrink-0';
-    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400 animate-spin"></span> <span class="hidden sm:inline">กำลังเชื่อมต่อ...</span><span class="sm:hidden">ต่อ...</span>';
+    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 shrink-0 whitespace-nowrap';
+    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-spin"></span> <span class="font-medium">ต่อ...</span>';
   } else if (status === 'disconnected') {
-    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[36px] sm:min-h-[38px] rounded-xl text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/30 shrink-0';
-    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span> <span class="hidden sm:inline">เชื่อมต่อใหม่...</span><span class="sm:hidden">ต่อใหม่...</span>';
+    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 shrink-0 whitespace-nowrap';
+    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> <span class="font-medium">ตัดการต่อ</span>';
   } else {
-    badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[36px] sm:min-h-[38px] rounded-xl text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 shrink-0';
-    badge.innerHTML = '<span>⏱ Edge Polling</span>';
+    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 shrink-0 whitespace-nowrap';
+    badge.innerHTML = '<span>Edge</span>';
   }
 }
 
@@ -358,181 +414,236 @@ function updateExistingCardsIfPresent(stations) {
   if (!anyCard) return false;
 
   stations.forEach(station => {
-    // 1. Sluice Gate Station Dual-Side In-Place Updates
-    if (station.isGate && station.inside && station.outside) {
-      const inBank = station.inside.bank || 1.30;
-      const inLvl = station.inside.level !== null ? station.inside.level : 0;
-      const inPct = Math.min(100, Math.max(10, Math.round((inLvl / inBank) * 80)));
+    try {
+      if (!station) return;
 
-      const outBank = station.outside.bank || 1.70;
-      const outLvl = station.outside.level !== null ? station.outside.level : 0;
-      const outPct = Math.min(100, Math.max(10, Math.round((outLvl / outBank) * 80)));
+      // 1. Sluice Gate Station Dual-Side In-Place Updates
+      if (station.isGate && station.inside && station.outside) {
+        const inBank = parseFloat(station.inside?.bank ?? 1.30);
+        const rawInLvl = station.inside?.level ?? station.inside?.waterLevel ?? null;
+        const inLvl = (rawInLvl !== null && rawInLvl !== undefined && !isNaN(parseFloat(rawInLvl))) ? parseFloat(rawInLvl) : 0;
+        const inPct = Math.min(100, Math.max(10, Math.round((inLvl / inBank) * 80)));
 
-      let inFillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
-      if (station.inside.isOverflow) inFillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
-      else if (station.inside.isWarning) inFillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
+        const outBank = parseFloat(station.outside?.bank ?? 1.70);
+        const rawOutLvl = station.outside?.level ?? station.outside?.waterLevel ?? null;
+        const outLvl = (rawOutLvl !== null && rawOutLvl !== undefined && !isNaN(parseFloat(rawOutLvl))) ? parseFloat(rawOutLvl) : 0;
+        const outPct = Math.min(100, Math.max(10, Math.round((outLvl / outBank) * 80)));
 
-      let outFillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
-      if (station.outside.isOverflow) outFillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
-      else if (station.outside.isWarning) outFillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
+        let inFillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
+        if (station.inside?.isOverflow) inFillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
+        else if (station.inside?.isWarning) inFillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
 
-      // Inside elements
-      document.querySelectorAll(`[data-station-inside-fill="${station.id}"]`).forEach(fill => {
-        fill.setAttribute('data-target-height', inPct);
-        fill.style.height = `${inPct}%`;
-        fill.className = `water-wave-fill ${inFillGrad}`;
-      });
-      document.querySelectorAll(`[data-station-inside-level="${station.id}"]`).forEach(el => {
-        el.textContent = station.inside.level !== null && station.inside.level !== undefined ? station.inside.level.toFixed(2) : '--';
-      });
-      document.querySelectorAll(`[data-station-inside-diff="${station.id}"]`).forEach(el => {
-        el.textContent = station.inside.diffCritical >= 0 
-          ? `+${station.inside.diffCritical.toFixed(2)}ม. (เกินวิกฤติ)`
-          : `${station.inside.diffBank.toFixed(2)}ม. ถึงตลิ่ง`;
-      });
+        let outFillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
+        if (station.outside?.isOverflow) outFillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
+        else if (station.outside?.isWarning) outFillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
 
-      // Outside elements
-      document.querySelectorAll(`[data-station-outside-fill="${station.id}"]`).forEach(fill => {
-        fill.setAttribute('data-target-height', outPct);
-        fill.style.height = `${outPct}%`;
-        fill.className = `water-wave-fill ${outFillGrad}`;
-      });
-      document.querySelectorAll(`[data-station-outside-level="${station.id}"]`).forEach(el => {
-        el.textContent = station.outside.level !== null && station.outside.level !== undefined ? station.outside.level.toFixed(2) : '--';
-      });
-      document.querySelectorAll(`[data-station-outside-diff="${station.id}"]`).forEach(el => {
-        el.textContent = station.outside.diffCritical >= 0 
-          ? `+${station.outside.diffCritical.toFixed(2)}ม. (เกินวิกฤติ)`
-          : `${station.outside.diffBank.toFixed(2)}ม. ถึงตลิ่ง`;
-      });
+        // Inside elements
+        document.querySelectorAll(`[data-station-inside-fill="${station.id}"]`).forEach(fill => {
+          fill.setAttribute('data-target-height', inPct);
+          fill.style.height = `${inPct}%`;
+          fill.className = `water-wave-fill ${inFillGrad}`;
+        });
+        document.querySelectorAll(`[data-station-inside-level="${station.id}"]`).forEach(el => {
+          el.textContent = rawInLvl !== null && rawInLvl !== undefined && !isNaN(parseFloat(rawInLvl)) ? parseFloat(rawInLvl).toFixed(2) : '--';
+        });
+        document.querySelectorAll(`[data-station-inside-diff="${station.id}"]`).forEach(el => {
+          if (station.inside?.diffCritical !== undefined && station.inside.diffCritical >= 0) {
+            el.textContent = `+${parseFloat(station.inside.diffCritical).toFixed(2)}ม. (เกินวิกฤติ)`;
+          } else if (station.inside?.diffBank !== undefined) {
+            el.textContent = `${parseFloat(station.inside.diffBank).toFixed(2)}ม. ถึงตลิ่ง`;
+          } else {
+            el.textContent = station.inside?.diffText || 'ปกติ';
+          }
+        });
 
-      // Gate Diff & Opening
-      document.querySelectorAll(`[data-station-gate-diff="${station.id}"]`).forEach(el => {
-        el.textContent = station.diffInOutText || 'ระดับน้ำเท่ากัน';
-      });
-      document.querySelectorAll(`[data-station-gate-opening="${station.id}"]`).forEach(el => {
-        el.textContent = station.gateOpening ? `${station.gateOpening.toFixed(2)} ม.` : '0.43 ม.';
-      });
-    }
+        // Outside elements
+        document.querySelectorAll(`[data-station-outside-fill="${station.id}"]`).forEach(fill => {
+          fill.setAttribute('data-target-height', outPct);
+          fill.style.height = `${outPct}%`;
+          fill.className = `water-wave-fill ${outFillGrad}`;
+        });
+        document.querySelectorAll(`[data-station-outside-level="${station.id}"]`).forEach(el => {
+          el.textContent = rawOutLvl !== null && rawOutLvl !== undefined && !isNaN(parseFloat(rawOutLvl)) ? parseFloat(rawOutLvl).toFixed(2) : '--';
+        });
+        document.querySelectorAll(`[data-station-outside-diff="${station.id}"]`).forEach(el => {
+          if (station.outside?.diffCritical !== undefined && station.outside.diffCritical >= 0) {
+            el.textContent = `+${parseFloat(station.outside.diffCritical).toFixed(2)}ม. (เกินวิกฤติ)`;
+          } else if (station.outside?.diffBank !== undefined) {
+            el.textContent = `${parseFloat(station.outside.diffBank).toFixed(2)}ม. ถึงตลิ่ง`;
+          } else {
+            el.textContent = station.outside?.diffText || 'ปกติ';
+          }
+        });
 
-    // 2. Standard Single-Side Station In-Place Updates
-    const bank = station.bankLevel || 2.0;
-    const level = station.waterLevel !== null ? station.waterLevel : 0;
-    const fillPct = Math.min(100, Math.max(10, Math.round((level / bank) * 80)));
-
-    let fillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
-    let statusClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-    let diffClass = 'text-emerald-400';
-
-    if (station.isOverflow) {
-      fillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
-      statusClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
-      diffClass = 'text-red-400';
-    } else if (station.isWarning) {
-      fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
-      statusClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
-      diffClass = 'text-amber-400';
-    }
-
-    // Update fills
-    document.querySelectorAll(`[data-station-fill="${station.id}"]`).forEach(fill => {
-      fill.setAttribute('data-target-height', fillPct);
-      fill.style.height = `${fillPct}%`;
-      fill.className = `water-wave-fill ${fillGrad}`;
-    });
-
-    // Update water level text
-    document.querySelectorAll(`[data-station-level="${station.id}"]`).forEach(el => {
-      el.textContent = (station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--';
-    });
-
-    // Update diff text and color
-    document.querySelectorAll(`[data-station-diff="${station.id}"]`).forEach(el => {
-      el.textContent = station.diffText || '';
-      el.className = `text-[11px] mt-1 font-semibold ${diffClass} truncate`;
-    });
-
-    // Update status badge
-    document.querySelectorAll(`[data-station-status="${station.id}"]`).forEach(el => {
-      el.textContent = station.statusText || 'ปกติ';
-      el.className = `px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${statusClass}`;
-    });
-
-    // Update timestamp & stale styling
-    document.querySelectorAll(`[data-station-time="${station.id}"]`).forEach(el => {
-      if (station.updatedAt) el.textContent = station.updatedAt;
-      if (station.isStale) {
-        el.className = 'text-amber-400 font-mono font-semibold';
-      } else {
-        el.className = 'text-slate-300 font-mono';
+        // Gate Diff & Opening
+        document.querySelectorAll(`[data-station-gate-diff="${station.id}"]`).forEach(el => {
+          el.textContent = station.diffInOutText || 'ระดับน้ำเท่ากัน';
+        });
+        document.querySelectorAll(`[data-station-gate-opening="${station.id}"]`).forEach(el => {
+          el.textContent = station.gateOpening ? `${parseFloat(station.gateOpening).toFixed(2)} ม.` : '0.43 ม.';
+        });
       }
-    });
 
-    // Update stale badge
-    document.querySelectorAll(`[data-station-stale-badge="${station.id}"]`).forEach(badge => {
-      if (station.isStale) {
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
-      }
-    });
+      // 2. Standard Single-Side Station In-Place Updates
+      const bank = parseFloat(station.bankLevel || 2.0);
+      const rawLevel = station.waterLevel ?? station.level ?? station.inside?.level ?? null;
+      const hasValidLevel = rawLevel !== null && rawLevel !== undefined && rawLevel !== '' && !isNaN(parseFloat(rawLevel));
+      const levelNum = hasValidLevel ? parseFloat(rawLevel) : null;
+      const fillPct = levelNum !== null ? Math.min(100, Math.max(10, Math.round((levelNum / bank) * 80))) : 50;
 
-    // Update stale text label
-    document.querySelectorAll(`[data-station-stale-text="${station.id}"]`).forEach(el => {
-      if (station.isStale && station.staleText) {
-        el.classList.remove('hidden');
-        el.textContent = `(${station.staleText})`;
-      } else {
-        el.classList.add('hidden');
-      }
-    });
+      let fillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
+      let statusClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+      let diffClass = 'text-emerald-400';
+      let statusText = station.statusText || 'ปกติ';
 
-    // Update stale pill in level box
-    document.querySelectorAll(`[data-station-stale-pill="${station.id}"]`).forEach(pill => {
-      if (station.isStale) {
-        pill.classList.remove('hidden');
-      } else {
-        pill.classList.add('hidden');
-      }
-    });
-
-    // Update distance tag
-    document.querySelectorAll(`[data-station-dist="${station.id}"]`).forEach(el => {
-      if (station.distanceText) {
-        el.classList.remove('hidden');
-        el.innerHTML = `<i data-lucide="navigation" class="w-3 h-3 text-sky-400 inline"></i> ${station.distanceKm <= 5.0 ? '🟡 ' : ''}${station.distanceText}`;
-      }
-    });
-
-    // Update limits
-    document.querySelectorAll(`[data-station-bank="${station.id}"]`).forEach(el => {
-      el.textContent = `${station.bankLevel} ม.`;
-    });
-    document.querySelectorAll(`[data-station-critical="${station.id}"]`).forEach(el => {
-      el.textContent = `${station.criticalLevel} ม.`;
-    });
-
-    // Update sub gauge label if present
-    document.querySelectorAll(`[data-station-level-sub="${station.id}"]`).forEach(el => {
-      el.textContent = `${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'} ม.`;
-    });
-
-    // Remove skeleton state from card container and apply stale styling
-    document.querySelectorAll(`[data-station-card="${station.id}"]`).forEach(card => {
-      card.classList.remove('animate-pulse');
-      if (station.isStale) {
-        card.classList.add('station-stale');
-      } else {
-        card.classList.remove('station-stale');
-      }
-      if (station.isOverflow) {
-        card.classList.remove('glass-panel-warning', 'border-slate-800');
-        card.classList.add('glass-panel-danger');
+      if (!hasValidLevel && !station.statusText) {
+        statusText = 'ไม่มีข้อมูล / รอตรวจวัด';
+        statusClass = 'bg-slate-800 text-slate-300 border-slate-700';
+        diffClass = 'text-slate-400';
+      } else if (station.isOverflow) {
+        fillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
+        statusClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
+        diffClass = 'text-red-400';
       } else if (station.isWarning) {
-        card.classList.remove('glass-panel-danger', 'border-slate-800');
-        card.classList.add('glass-panel-warning');
+        fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
+        statusClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+        diffClass = 'text-amber-400';
       }
-    });
+
+      // Update fills
+      document.querySelectorAll(`[data-station-fill="${station.id}"]`).forEach(fill => {
+        fill.setAttribute('data-target-height', fillPct);
+        fill.style.height = `${fillPct}%`;
+        fill.className = `water-wave-fill ${fillGrad}`;
+      });
+
+      // Update water level text
+      document.querySelectorAll(`[data-station-level="${station.id}"]`).forEach(el => {
+        el.textContent = levelNum !== null ? levelNum.toFixed(2) : '--';
+      });
+
+      // Update diff text and color
+      document.querySelectorAll(`[data-station-diff="${station.id}"]`).forEach(el => {
+        el.textContent = station.diffText || (hasValidLevel ? '' : 'รอข้อมูลตรวจวัด');
+        el.className = `text-[11px] mt-1 font-semibold ${diffClass} truncate`;
+      });
+
+      // Update status badge
+      document.querySelectorAll(`[data-station-status="${station.id}"]`).forEach(el => {
+        el.textContent = statusText;
+        el.className = `px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${statusClass}`;
+      });
+
+      // Update timestamp & stale styling
+      const isStale = station.isStale ?? false;
+      const updateTime = station.updatedAt ?? station.time ?? '-';
+      document.querySelectorAll(`[data-station-time="${station.id}"]`).forEach(el => {
+        el.textContent = updateTime;
+        if (isStale) {
+          el.className = 'text-amber-400 font-mono font-semibold';
+        } else {
+          el.className = 'text-slate-300 font-mono';
+        }
+      });
+
+      // Update stale badge
+      document.querySelectorAll(`[data-station-stale-badge="${station.id}"]`).forEach(badge => {
+        if (isStale) {
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      });
+
+      // Update stale text label
+      document.querySelectorAll(`[data-station-stale-text="${station.id}"]`).forEach(el => {
+        if (isStale && station.staleText) {
+          el.classList.remove('hidden');
+          el.textContent = `(${station.staleText})`;
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+
+      // Update stale pill in level box
+      document.querySelectorAll(`[data-station-stale-pill="${station.id}"]`).forEach(pill => {
+        if (isStale) {
+          pill.classList.remove('hidden');
+        } else {
+          pill.classList.add('hidden');
+        }
+      });
+
+      // Update distance tag
+      document.querySelectorAll(`[data-station-dist="${station.id}"]`).forEach(el => {
+        if (station.distanceText) {
+          el.classList.remove('hidden');
+          el.innerHTML = `<i data-lucide="navigation" class="w-3 h-3 text-sky-400 inline"></i> ${station.distanceKm <= 5.0 ? '🟡 ' : ''}${station.distanceText}`;
+        }
+      });
+
+      // Update limits
+      document.querySelectorAll(`[data-station-bank="${station.id}"]`).forEach(el => {
+        el.textContent = `${bank.toFixed(2)} ม.`;
+      });
+      document.querySelectorAll(`[data-station-critical="${station.id}"]`).forEach(el => {
+        const crit = parseFloat(station.criticalLevel || 1.8);
+        el.textContent = `${crit.toFixed(2)} ม.`;
+      });
+
+      // Update sub gauge label if present
+      document.querySelectorAll(`[data-station-level-sub="${station.id}"]`).forEach(el => {
+        el.textContent = `${levelNum !== null ? levelNum.toFixed(2) : '--'} ม.`;
+      });
+
+      // Remove skeleton state from card container and apply stale styling
+      document.querySelectorAll(`[data-station-card="${station.id}"]`).forEach(card => {
+        card.classList.remove('animate-pulse');
+        if (isStale) {
+          card.classList.add('station-stale');
+        } else {
+          card.classList.remove('station-stale');
+        }
+        if (station.isOverflow) {
+          card.classList.remove('glass-panel-warning', 'border-slate-800');
+          card.classList.add('glass-panel-danger');
+        } else if (station.isWarning) {
+          card.classList.remove('glass-panel-danger', 'border-slate-800');
+          card.classList.add('glass-panel-warning');
+        }
+      });
+    } catch (err) {
+      console.error(`Error updating station card in place: ${station?.id}`, err);
+    }
+  });
+
+  // Guarantee pinned stations are never stuck on "กำลังโหลด..."
+  CANONICAL_PINNED_STATIONS.forEach(canon => {
+    try {
+      const live = stations.find(s => s?.id === canon.id || s?.stCode === canon.stCode);
+      const liveLevel = live?.waterLevel ?? live?.level ?? live?.inside?.level ?? null;
+      const hasLiveLevel = liveLevel !== null && liveLevel !== undefined && liveLevel !== '' && !isNaN(parseFloat(liveLevel));
+      if (!live || !hasLiveLevel) {
+        document.querySelectorAll(`[data-station-status="${canon.id}"]`).forEach(el => {
+          if (el.textContent.includes('กำลังโหลด') || el.textContent.includes('...')) {
+            el.textContent = 'ไม่มีข้อมูล / รอตรวจวัด';
+            el.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 bg-slate-800 text-slate-300 border-slate-700';
+          }
+        });
+        document.querySelectorAll(`[data-station-diff="${canon.id}"]`).forEach(el => {
+          if (el.textContent.includes('กำลังดึง') || el.textContent.includes('...')) {
+            el.textContent = 'รอข้อมูลตรวจวัด';
+          }
+        });
+        document.querySelectorAll(`[data-station-time="${canon.id}"]`).forEach(el => {
+          if (el.textContent === '--:--' || el.textContent.includes('กำลังโหลด')) {
+            el.textContent = '-';
+          }
+        });
+      }
+    } catch (e) {
+      // safe ignore
+    }
   });
 
   triggerWaterFillTransitions();
@@ -607,7 +718,7 @@ function setUserCoordinates(lat, lng, sourceLabel = 'พิกัด GPS') {
 
   const gpsBtnText = document.getElementById('gpsBtnText');
   const gpsStatusIcon = document.getElementById('gpsStatusIcon');
-  if (gpsBtnText) gpsBtnText.textContent = `📍 ${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  if (gpsBtnText) gpsBtnText.textContent = `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
   if (gpsStatusIcon) {
     gpsStatusIcon.classList.remove('animate-spin');
     gpsStatusIcon.setAttribute('data-lucide', 'locate-fixed');
@@ -641,7 +752,7 @@ function initGeolocation(isManual = false) {
   const gpsStatusIcon = document.getElementById('gpsStatusIcon');
 
   if (!navigator.geolocation) {
-    if (gpsBtnText) gpsBtnText.textContent = '📍 GPS ไม่รองรับ';
+    if (gpsBtnText) gpsBtnText.textContent = 'GPS ไม่รองรับ';
     return;
   }
 
@@ -649,7 +760,7 @@ function initGeolocation(isManual = false) {
   const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (!isSecure) {
     console.warn('[Geolocation]: Browser requires HTTPS to access Geolocation API');
-    if (gpsBtnText) gpsBtnText.textContent = '📍 13.881, 100.711';
+    if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
     if (isManual) {
       alert('⚠️ ระบบต้องการการเชื่อมต่อแบบ HTTPS เพื่อใช้งานพิกัด GPS\nกรุณาเข้าใช้งานผ่าน https:// เพื่อให้เบราว์เซอร์อนุญาตพิกัดตำแหน่ง');
     }
@@ -669,14 +780,14 @@ function initGeolocation(isManual = false) {
       if (gpsStatusIcon) gpsStatusIcon.classList.remove('animate-spin');
 
       if (error.code === error.PERMISSION_DENIED) {
-        if (gpsBtnText) gpsBtnText.textContent = '📍 13.881, 100.711';
+        if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
         if (isManual) {
           alert('📍 ยังไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง:\nกรุณากด "อนุญาต (Allow)" ในการตั้งค่าเบราว์เซอร์ เพื่อคำนวณระยะห่างจากสถานีตรวจวัดน้ำใกล้คุณ');
         }
       } else if (error.code === error.TIMEOUT) {
-        if (gpsBtnText) gpsBtnText.textContent = '📍 13.881, 100.711';
+        if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
       } else {
-        if (gpsBtnText) gpsBtnText.textContent = '📍 13.881, 100.711';
+        if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
       }
 
       recalculateDistances();
@@ -739,7 +850,32 @@ async function fetchWaterSummary() {
     applyDataUpdate(data);
   } catch (err) {
     console.error('Failed to fetch water summary:', err);
+    markPinnedCardsNoData();
   }
+}
+
+/**
+ * Fallback handler: mark pinned cards as 'ไม่มีข้อมูล / รอตรวจวัด' if API unreachable
+ */
+function markPinnedCardsNoData() {
+  CANONICAL_PINNED_STATIONS.forEach(canon => {
+    document.querySelectorAll(`[data-station-status="${canon.id}"]`).forEach(el => {
+      if (el.textContent.includes('กำลังโหลด') || el.textContent.includes('...')) {
+        el.textContent = 'ไม่มีข้อมูล / รอตรวจวัด';
+        el.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 bg-slate-800 text-slate-300 border-slate-700';
+      }
+    });
+    document.querySelectorAll(`[data-station-diff="${canon.id}"]`).forEach(el => {
+      if (el.textContent.includes('กำลังดึง') || el.textContent.includes('...')) {
+        el.textContent = 'รอข้อมูลตรวจวัด';
+      }
+    });
+    document.querySelectorAll(`[data-station-time="${canon.id}"]`).forEach(el => {
+      if (el.textContent === '--:--' || el.textContent.includes('กำลังโหลด')) {
+        el.textContent = '-';
+      }
+    });
+  });
 }
 
 /**
@@ -751,7 +887,7 @@ function updateHeaderStatus() {
 
   if (appState.lastUpdated) {
     const d = new Date(appState.lastUpdated);
-    const timeStr = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.';
+    const timeStr = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
     if (lastUpdatedTime) lastUpdatedTime.textContent = timeStr;
     if (lastUpdatedTimeMobile) lastUpdatedTimeMobile.textContent = timeStr;
   }
@@ -2145,36 +2281,39 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
  * SECTION 2: Pinned Priority Stations (4 จุดเฝ้าระวังหลักรอยต่อ ปทุมธานี - กทม.: ST-1 ถึง ST-4)
  * Always visible and pinned!
  */
-function renderSection2PinnedPriority() {
-  const container = document.getElementById('pinnedPriorityContainer');
-  if (!container) return;
+function renderPinnedPriorityCard(station, canon, idx) {
+  try {
+    // 1. Water level with optional chaining and fallbacks
+    // station.level ?? station.inside?.level ?? '0.00'
+    const rawLevel = station?.waterLevel ?? station?.level ?? station?.inside?.level ?? null;
+    const hasValidLevel = rawLevel !== null && rawLevel !== undefined && rawLevel !== '' && !isNaN(parseFloat(rawLevel));
+    const levelNum = hasValidLevel ? parseFloat(rawLevel) : null;
+    const levelDisplay = levelNum !== null ? levelNum.toFixed(2) : (station?.id ? (station.level ?? station.inside?.level ?? '0.00') : '--');
 
-  const pinnedOrder = ['ST-1', 'ST-2', 'ST-3', 'ST-4'];
-  const pinnedStations = appState.stations
-    .filter(s => s.isPinned || pinnedOrder.includes(s.stCode))
-    .sort((a, b) => {
-      const idxA = pinnedOrder.indexOf(a.stCode);
-      const idxB = pinnedOrder.indexOf(b.stCode);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      const numA = parseInt((a.stCode || '').replace(/\D/g, ''), 10) || 999;
-      const numB = parseInt((b.stCode || '').replace(/\D/g, ''), 10) || 999;
-      return numA - numB;
-    });
+    // 2. Staleness with optional chaining and fallback
+    // station.isStale ?? false
+    const isStale = station?.isStale ?? false;
+    const staleText = station?.staleText ?? '';
 
-  if (pinnedStations.length === 0) {
-    container.innerHTML = `<div class="p-6 text-center text-slate-400">กำลังโหลด 4 จุดเฝ้าระวังหลัก (ST-1 ถึง ST-4)...</div>`;
-    return;
-  }
+    // 3. Update time with optional chaining and fallback
+    // station.time ?? '-'
+    const updateTime = station?.updatedAt ?? station?.time ?? '-';
 
-  container.innerHTML = pinnedStations.map((station, idx) => {
-    const isDanger = station.isOverflow;
-    const isWarning = station.isWarning;
+    // 4. Thresholds & Status
+    const bank = parseFloat(station?.bankLevel ?? canon?.bankLevel ?? 2.0);
+    const critical = parseFloat(station?.criticalLevel ?? canon?.criticalLevel ?? 1.8);
+    const isDanger = station?.isOverflow ?? (levelNum !== null && levelNum >= bank);
+    const isWarning = station?.isWarning ?? (levelNum !== null && levelNum >= critical);
 
     let cardBorder = 'border-slate-800';
     let badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    let statusText = station?.statusText ?? 'ปกติ';
     let fillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
 
-    if (isDanger) {
+    if (!hasValidLevel && !station?.statusText) {
+      statusText = 'ไม่มีข้อมูล / รอตรวจวัด';
+      badgeClass = 'bg-slate-800 text-slate-300 border-slate-700';
+    } else if (isDanger) {
       cardBorder = 'glass-panel-danger';
       badgeClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
       fillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
@@ -2184,16 +2323,18 @@ function renderSection2PinnedPriority() {
       fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
     }
 
-    const bank = station.bankLevel || 2.0;
-    const level = station.waterLevel !== null ? station.waterLevel : 0;
-    const fillPct = Math.min(100, Math.max(10, Math.round((level / bank) * 80)));
+    const fillPct = levelNum !== null ? Math.min(100, Math.max(10, Math.round((levelNum / bank) * 80))) : 50;
+    const diffText = station?.diffText ?? (!hasValidLevel ? 'รอข้อมูลตรวจวัด' : '');
 
-    const distanceBadge = (station.distanceKm !== null && station.distanceKm !== undefined)
-      ? `<span class="distance-pill text-[11px] font-mono font-bold"><i data-lucide="navigation" class="w-3 h-3 text-sky-400"></i> ${station.distanceKm <= 5.0 ? '🟡 ' : ''}ห่าง ${formatDistance(station.distanceKm)}</span>`
-      : '';
+    const distanceBadge = (station?.distanceKm !== null && station?.distanceKm !== undefined)
+      ? `<span data-station-dist="${canon.id}" class="distance-pill text-[11px] font-mono font-bold"><i data-lucide="navigation" class="w-3 h-3 text-sky-400"></i> ${station.distanceKm <= 5.0 ? '🟡 ' : ''}ห่าง ${formatDistance(station.distanceKm)}</span>`
+      : `<span data-station-dist="${canon.id}" class="distance-pill text-[11px] font-mono font-bold hidden"></span>`;
+
+    const lat = station?.lat ?? canon.lat ?? 13.93;
+    const lng = station?.lng ?? canon.lng ?? 100.75;
 
     return `
-      <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card ${station.isStale ? 'station-stale' : ''} rounded-3xl glass-panel p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
+      <div data-station-card="${canon.id}" onclick="focusStationOnMap('${canon.id}')" class="station-card ${isStale ? 'station-stale' : ''} rounded-3xl glass-panel p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50 min-h-[420px]">
         ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
         ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
@@ -2204,26 +2345,26 @@ function renderSection2PinnedPriority() {
               <div class="flex items-center gap-2 flex-wrap mb-1">
                 <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 font-mono">
                   <i data-lucide="pin" class="w-3 h-3 text-amber-400"></i>
-                  <span>${station.stCode || `ST-${idx + 1}`}</span>
+                  <span>${canon.stCode || `ST-${idx + 1}`}</span>
                 </span>
                 ${distanceBadge}
-                <span class="text-[11px] text-slate-500 font-mono">${station.stationCode || ''}</span>
+                <span class="text-[11px] text-slate-500 font-mono">${station?.stationCode ?? canon.stationCode ?? ''}</span>
               </div>
               <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug hover:text-sky-300 transition">
-                ${station.name}
+                ${station?.name ?? canon.name}
               </h3>
               <p class="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
                 <i data-lucide="map-pin" class="w-3 h-3 text-slate-500"></i>
-                ${station.location || 'รอยต่อปทุมธานี - กทม.'}
+                <span>${station?.location ?? canon.location}</span>
               </p>
             </div>
 
             <div class="flex items-center gap-1.5 shrink-0">
-              <span data-station-stale-badge="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${station.isStale ? '' : 'hidden'}">
+              <span data-station-stale-badge="${canon.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${isStale ? '' : 'hidden'}">
                 <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
               </span>
-              <div data-station-status="${station.id}" class="px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${badgeClass}">
-                <span>${station.statusText}</span>
+              <div data-station-status="${canon.id}" class="px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${badgeClass}">
+                <span>${statusText}</span>
               </div>
             </div>
           </div>
@@ -2234,16 +2375,16 @@ function renderSection2PinnedPriority() {
               <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800">
                 <div class="flex items-center justify-between text-[11px] font-medium text-slate-400">
                   <span>ระดับน้ำปัจจุบัน</span>
-                  <span data-station-stale-pill="${station.id}" class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 ${station.isStale ? '' : 'hidden'}">🕒 (ข้อมูลเดิม)</span>
+                  <span data-station-stale-pill="${canon.id}" class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 ${isStale ? '' : 'hidden'}">🕒 (ข้อมูลเดิม)</span>
                 </div>
                 <div class="flex items-baseline gap-1.5 mt-0.5">
-                  <span data-station-level="${station.id}" class="text-3xl font-black text-white font-mono-numbers">
-                    ${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'}
+                  <span data-station-level="${canon.id}" class="text-3xl font-black text-white font-mono-numbers">
+                    ${levelDisplay}
                   </span>
                   <span class="text-xs text-slate-400">ม.รทก.</span>
                 </div>
-                <div data-station-diff="${station.id}" class="text-[11px] mt-1 font-semibold ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')}">
-                  ${station.diffText || ''}
+                <div data-station-diff="${canon.id}" class="text-[11px] mt-1 font-semibold ${station?.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : (!hasValidLevel ? 'text-slate-400' : 'text-emerald-400'))} truncate">
+                  ${diffText}
                 </div>
               </div>
 
@@ -2251,11 +2392,11 @@ function renderSection2PinnedPriority() {
               <div class="grid grid-cols-2 gap-2 text-[11px]">
                 <div class="bg-slate-900/50 rounded-lg p-2 border border-slate-800/80">
                   <span class="text-slate-400">ตลิ่ง:</span>
-                  <b class="text-slate-200 ml-1 font-mono">${station.bankLevel} ม.</b>
+                  <b data-station-bank="${canon.id}" class="text-slate-200 ml-1 font-mono">${bank.toFixed(2)} ม.</b>
                 </div>
                 <div class="bg-slate-900/50 rounded-lg p-2 border border-slate-800/80">
                   <span class="text-amber-400">วิกฤติ:</span>
-                  <b class="text-amber-300 ml-1 font-mono">${station.criticalLevel} ม.</b>
+                  <b data-station-critical="${canon.id}" class="text-amber-300 ml-1 font-mono">${critical.toFixed(2)} ม.</b>
                 </div>
               </div>
             </div>
@@ -2264,16 +2405,16 @@ function renderSection2PinnedPriority() {
             <div class="col-span-5 flex flex-col items-center">
               <div class="w-full h-36 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1.5 relative shadow-inner">
                 <div class="bank-marker-line" style="bottom: 78%;">
-                  <span class="bank-marker-label">ตลิ่ง ${station.bankLevel}m</span>
+                  <span class="bank-marker-label">ตลิ่ง ${bank.toFixed(2)}m</span>
                 </div>
                 <div class="critical-marker-line" style="bottom: 60%;">
-                  <span class="critical-marker-label">วิกฤติ ${station.criticalLevel}m</span>
+                  <span class="critical-marker-label">วิกฤติ ${critical.toFixed(2)}m</span>
                 </div>
-                <div class="water-wave-fill ${fillGrad}" data-station-fill="${station.id}" data-target-height="${fillPct}" style="height: 0%;">
+                <div class="water-wave-fill ${fillGrad}" data-station-fill="${canon.id}" data-target-height="${fillPct}" style="height: ${fillPct}%;">
                   <div class="water-surface-line"></div>
                 </div>
-                <div data-station-level-sub="${station.id}" class="z-20 relative text-center text-[11px] font-mono font-bold text-white drop-shadow">
-                  ${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'} ม.
+                <div data-station-level-sub="${canon.id}" class="z-20 relative text-center text-[11px] font-mono font-bold text-white drop-shadow">
+                  ${levelDisplay} ม.
                 </div>
               </div>
             </div>
@@ -2282,13 +2423,13 @@ function renderSection2PinnedPriority() {
 
         <!-- Card Footer -->
         <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-          <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
+          <span>เวลา: <b data-station-time="${canon.id}" class="${isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${updateTime}</b> <span data-station-stale-text="${canon.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${isStale && staleText ? '' : 'hidden'}">(${staleText})</span></span>
           <div class="flex items-center gap-2">
-            <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
+            <button onclick="event.stopPropagation(); focusStationOnMap('${canon.id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
               <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
               <span>ดูบนแผนที่</span>
             </button>
-            <a href="https://www.google.com/maps?q=${station.lat},${station.lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
+            <a href="https://www.google.com/maps?q=${lat},${lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
               <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
             </a>
           </div>
@@ -2296,9 +2437,127 @@ function renderSection2PinnedPriority() {
 
       </div>
     `;
-  }).join('');
+  } catch (cardErr) {
+    console.error(`Error rendering Section 2 card for ${canon?.stCode || canon?.id}:`, cardErr);
+    return renderFallbackPinnedCard(canon, idx);
+  }
+}
 
-  if (window.lucide) window.lucide.createIcons();
+function renderFallbackPinnedCard(canon, idx) {
+  const stCode = canon?.stCode || `ST-${(idx || 0) + 1}`;
+  const id = canon?.id || 'unknown';
+  const name = canon?.name || 'สถานีตรวจวัดระดับน้ำ';
+  const location = canon?.location || 'รอยต่อปทุมธานี - กทม.';
+  const bank = canon?.bankLevel ?? 2.0;
+  const critical = canon?.criticalLevel ?? 1.8;
+  const lat = canon?.lat ?? 13.93;
+  const lng = canon?.lng ?? 100.75;
+
+  return `
+    <div data-station-card="${id}" onclick="focusStationOnMap('${id}')" class="station-card rounded-3xl glass-panel p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50 min-h-[420px]">
+      <div>
+        <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div>
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 font-mono">
+                <i data-lucide="pin" class="w-3 h-3 text-amber-400"></i>
+                <span>${stCode}</span>
+              </span>
+              <span class="text-[11px] text-slate-500 font-mono">${canon?.stationCode || ''}</span>
+            </div>
+            <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug hover:text-sky-300 transition">
+              ${name}
+            </h3>
+            <p class="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+              <i data-lucide="map-pin" class="w-3 h-3 text-slate-500"></i>
+              <span>${location}</span>
+            </p>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0">
+            <div data-station-status="${id}" class="px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 bg-slate-800 text-slate-300 border-slate-700">
+              <span>ไม่มีข้อมูล / รอตรวจวัด</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-12 gap-4 my-4 items-center">
+          <div class="col-span-7 space-y-2">
+            <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800">
+              <div class="flex items-center justify-between text-[11px] font-medium text-slate-400">
+                <span>ระดับน้ำปัจจุบัน</span>
+              </div>
+              <div class="flex items-baseline gap-1.5 mt-0.5">
+                <span data-station-level="${id}" class="text-3xl font-black text-white font-mono-numbers">--</span>
+                <span class="text-xs text-slate-400">ม.รทก.</span>
+              </div>
+              <div data-station-diff="${id}" class="text-[11px] mt-1 font-semibold text-slate-400 truncate">
+                รอข้อมูลตรวจวัด
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div class="bg-slate-900/50 rounded-lg p-2 border border-slate-800/80">
+                <span class="text-slate-400">ตลิ่ง:</span>
+                <b data-station-bank="${id}" class="text-slate-200 ml-1 font-mono">${typeof bank === 'number' ? bank.toFixed(2) : bank} ม.</b>
+              </div>
+              <div class="bg-slate-900/50 rounded-lg p-2 border border-slate-800/80">
+                <span class="text-amber-400">วิกฤติ:</span>
+                <b data-station-critical="${id}" class="text-amber-300 ml-1 font-mono">${typeof critical === 'number' ? critical.toFixed(2) : critical} ม.</b>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-5 flex flex-col items-center">
+            <div class="w-full h-36 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1.5 relative shadow-inner">
+              <div class="bank-marker-line" style="bottom: 78%;">
+                <span class="bank-marker-label">ตลิ่ง ${typeof bank === 'number' ? bank.toFixed(2) : bank}m</span>
+              </div>
+              <div class="critical-marker-line" style="bottom: 60%;">
+                <span class="critical-marker-label">วิกฤติ ${typeof critical === 'number' ? critical.toFixed(2) : critical}m</span>
+              </div>
+              <div class="water-wave-fill bg-gradient-to-t from-slate-700 to-slate-600" data-station-fill="${id}" data-target-height="50" style="height: 50%;">
+                <div class="water-surface-line"></div>
+              </div>
+              <div data-station-level-sub="${id}" class="z-20 relative text-center text-[11px] font-mono font-bold text-white drop-shadow">
+                -- ม.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+        <span>เวลา: <b data-station-time="${id}" class="text-slate-300 font-mono">-</b></span>
+        <div class="flex items-center gap-2">
+          <button onclick="event.stopPropagation(); focusStationOnMap('${id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
+            <span>ดูบนแผนที่</span>
+          </button>
+          <a href="https://www.google.com/maps?q=${lat},${lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
+            <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSection2PinnedPriority() {
+  const container = document.getElementById('pinnedPriorityContainer');
+  if (!container) return;
+
+  try {
+    container.innerHTML = CANONICAL_PINNED_STATIONS.map((canon, idx) => {
+      const liveData = (appState.stations || []).find(s => s?.id === canon.id || s?.stCode === canon.stCode);
+      const station = liveData ? { ...canon, ...liveData } : canon;
+      return renderPinnedPriorityCard(station, canon, idx);
+    }).join('');
+
+    if (window.lucide) window.lucide.createIcons();
+  } catch (err) {
+    console.error('Error rendering Section 2 pinned priority container:', err);
+  }
 }
 
 /**
