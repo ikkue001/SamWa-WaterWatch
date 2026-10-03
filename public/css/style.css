@@ -36,6 +36,17 @@ body {
    ======================================================== */
 main {
   min-height: 100vh;
+  contain: layout paint;
+}
+
+#mapSection,
+#smartCanalSectionContainer,
+#pinnedSection,
+#allCanalsSection,
+#floodGuidelinesSection {
+  contain: layout;
+  content-visibility: auto;
+  contain-intrinsic-size: 400px;
 }
 
 #alertBannerContainer {
@@ -44,9 +55,11 @@ main {
 }
 
 #floodMap {
-  width: 100%;
+  width: 100% !important;
   height: 380px !important;
   min-height: 380px !important;
+  display: block !important;
+  background-color: #1e293b !important;
 }
 
 button, a, input, select {

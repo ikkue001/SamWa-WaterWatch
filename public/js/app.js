@@ -57,7 +57,8 @@ let appState = {
   nearestStation: null,
   nearestCanalGroup: null,
   selectedCanalTab: null, // user selected tab or auto-detected
-  realtimeConnected: false
+  realtimeConnected: false,
+  hasRenderedOnce: false
 };
 
 let countdownSeconds = 150;
@@ -205,10 +206,18 @@ function applyDataUpdate(data) {
 
   recalculateDistances();
 
-  // Try updating in-place first for smooth water height transition
-  const updatedInPlace = updateExistingCardsIfPresent(appState.stations);
-  if (!updatedInPlace) {
-    renderAllSections();
+  // On initial load, render Section 1 & Section 3 while keeping Section 2 updated in-place (CLS = 0)
+  if (!appState.hasRenderedOnce) {
+    appState.hasRenderedOnce = true;
+    renderSection1SmartCanalGPS();
+    renderSection3AllCanals();
+    updateExistingCardsIfPresent(appState.stations);
+  } else {
+    // Try updating in-place first for smooth water height transition
+    const updatedInPlace = updateExistingCardsIfPresent(appState.stations);
+    if (!updatedInPlace) {
+      renderAllSections();
+    }
   }
 
   updateMapMarkers();
@@ -219,10 +228,11 @@ function applyDataUpdate(data) {
 
 /**
  * Update existing station cards in place so CSS height transitions smoothly
+ * Replaces card contents without rebuilding DOM nodes to eliminate CLS
  */
 function updateExistingCardsIfPresent(stations) {
   if (!stations || stations.length === 0) return false;
-  const anyCard = document.querySelector('[data-station-fill], [data-station-inside-fill]');
+  const anyCard = document.querySelector('[data-station-fill], [data-station-inside-fill], [data-station-card]');
   if (!anyCard) return false;
 
   stations.forEach(station => {
@@ -236,10 +246,19 @@ function updateExistingCardsIfPresent(stations) {
       const outLvl = station.outside.level !== null ? station.outside.level : 0;
       const outPct = Math.min(100, Math.max(10, Math.round((outLvl / outBank) * 80)));
 
+      let inFillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
+      if (station.inside.isOverflow) inFillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
+      else if (station.inside.isWarning) inFillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
+
+      let outFillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
+      if (station.outside.isOverflow) outFillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
+      else if (station.outside.isWarning) outFillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
+
       // Inside elements
       document.querySelectorAll(`[data-station-inside-fill="${station.id}"]`).forEach(fill => {
         fill.setAttribute('data-target-height', inPct);
         fill.style.height = `${inPct}%`;
+        fill.className = `water-wave-fill ${inFillGrad}`;
       });
       document.querySelectorAll(`[data-station-inside-level="${station.id}"]`).forEach(el => {
         el.textContent = station.inside.level !== null && station.inside.level !== undefined ? station.inside.level.toFixed(2) : '--';
@@ -254,6 +273,7 @@ function updateExistingCardsIfPresent(stations) {
       document.querySelectorAll(`[data-station-outside-fill="${station.id}"]`).forEach(fill => {
         fill.setAttribute('data-target-height', outPct);
         fill.style.height = `${outPct}%`;
+        fill.className = `water-wave-fill ${outFillGrad}`;
       });
       document.querySelectorAll(`[data-station-outside-level="${station.id}"]`).forEach(el => {
         el.textContent = station.outside.level !== null && station.outside.level !== undefined ? station.outside.level.toFixed(2) : '--';
@@ -278,10 +298,25 @@ function updateExistingCardsIfPresent(stations) {
     const level = station.waterLevel !== null ? station.waterLevel : 0;
     const fillPct = Math.min(100, Math.max(10, Math.round((level / bank) * 80)));
 
+    let fillGrad = 'bg-gradient-to-t from-blue-700 to-sky-500';
+    let statusClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+    let diffClass = 'text-emerald-400';
+
+    if (station.isOverflow) {
+      fillGrad = 'bg-gradient-to-t from-red-700 to-rose-500';
+      statusClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
+      diffClass = 'text-red-400';
+    } else if (station.isWarning) {
+      fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
+      statusClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+      diffClass = 'text-amber-400';
+    }
+
     // Update fills
     document.querySelectorAll(`[data-station-fill="${station.id}"]`).forEach(fill => {
       fill.setAttribute('data-target-height', fillPct);
       fill.style.height = `${fillPct}%`;
+      fill.className = `water-wave-fill ${fillGrad}`;
     });
 
     // Update water level text
@@ -289,17 +324,59 @@ function updateExistingCardsIfPresent(stations) {
       el.textContent = (station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--';
     });
 
-    // Update diff text
+    // Update diff text and color
     document.querySelectorAll(`[data-station-diff="${station.id}"]`).forEach(el => {
       el.textContent = station.diffText || '';
+      el.className = `text-[11px] mt-1 font-semibold ${diffClass} truncate`;
+    });
+
+    // Update status badge
+    document.querySelectorAll(`[data-station-status="${station.id}"]`).forEach(el => {
+      el.textContent = station.statusText || 'ปกติ';
+      el.className = `px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${statusClass}`;
+    });
+
+    // Update timestamp
+    document.querySelectorAll(`[data-station-time="${station.id}"]`).forEach(el => {
+      if (station.updatedAt) el.textContent = station.updatedAt;
+    });
+
+    // Update distance tag
+    document.querySelectorAll(`[data-station-dist="${station.id}"]`).forEach(el => {
+      if (station.distanceText) {
+        el.classList.remove('hidden');
+        el.innerHTML = `<i data-lucide="navigation" class="w-3 h-3 text-sky-400 inline"></i> ${station.distanceKm <= 5.0 ? '🟡 ' : ''}${station.distanceText}`;
+      }
+    });
+
+    // Update limits
+    document.querySelectorAll(`[data-station-bank="${station.id}"]`).forEach(el => {
+      el.textContent = `${station.bankLevel} ม.`;
+    });
+    document.querySelectorAll(`[data-station-critical="${station.id}"]`).forEach(el => {
+      el.textContent = `${station.criticalLevel} ม.`;
     });
 
     // Update sub gauge label if present
     document.querySelectorAll(`[data-station-level-sub="${station.id}"]`).forEach(el => {
       el.textContent = `${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'} ม.`;
     });
+
+    // Remove skeleton state from card container
+    document.querySelectorAll(`[data-station-card="${station.id}"]`).forEach(card => {
+      card.classList.remove('animate-pulse');
+      if (station.isOverflow) {
+        card.classList.remove('glass-panel-warning', 'border-slate-800');
+        card.classList.add('glass-panel-danger');
+      } else if (station.isWarning) {
+        card.classList.remove('glass-panel-danger', 'border-slate-800');
+        card.classList.add('glass-panel-warning');
+      }
+    });
   });
 
+  triggerWaterFillTransitions();
+  if (window.lucide) window.lucide.createIcons();
   return true;
 }
 
@@ -378,7 +455,10 @@ function setUserCoordinates(lat, lng, sourceLabel = 'พิกัด GPS') {
 
   console.log(`[User Location]: ${sourceLabel} lat: ${lat.toFixed(4)}, lng: ${lng.toFixed(4)}`);
   recalculateDistances();
-  renderAllSections();
+  const updatedInPlace = updateExistingCardsIfPresent(appState.stations);
+  if (!updatedInPlace) {
+    renderAllSections();
+  }
   updateMapMarkers();
   handleTwoTierAlerts();
   if (window.lucide) window.lucide.createIcons();
@@ -440,7 +520,10 @@ function initGeolocation(isManual = false) {
       }
 
       recalculateDistances();
-      renderAllSections();
+      const updatedInPlace = updateExistingCardsIfPresent(appState.stations);
+      if (!updatedInPlace) {
+        renderAllSections();
+      }
       updateMapMarkers();
       handleTwoTierAlerts();
     },
@@ -546,10 +629,11 @@ function initLeafletMap() {
     if (leafletMap) leafletMap.invalidateSize();
   });
 
-  // OpenStreetMap base layer
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'
+  // CartoDB Dark Matter Tile Layer (Global High-Speed Edge CDN, Dark Theme, Fast LCP)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 20,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
   }).addTo(leafletMap);
 
   // Map Header Buttons
