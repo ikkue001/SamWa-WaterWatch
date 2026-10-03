@@ -38,6 +38,119 @@ function saveStationsCache(stations) {
   }
 }
 
+/**
+ * Universal timestamp parser supporting Thai Buddhist dates, ISO strings, and standard dates.
+ */
+function parseStationTimestamp(timeStr, referenceDate = new Date()) {
+  if (!timeStr) return null;
+  if (timeStr instanceof Date) return isNaN(timeStr.getTime()) ? null : timeStr;
+
+  const str = String(timeStr).trim();
+
+  // Format 1: Thai Buddhist date "DD/MM/BBBB HH:mm" or "DD/MM/BBBB HH:mm:ss" (e.g. "03/10/2569 10:30")
+  const thaiMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (thaiMatch) {
+    const day = parseInt(thaiMatch[1], 10);
+    const month = parseInt(thaiMatch[2], 10) - 1;
+    let year = parseInt(thaiMatch[3], 10);
+    const hour = parseInt(thaiMatch[4], 10);
+    const minute = parseInt(thaiMatch[5], 10);
+    const second = thaiMatch[6] ? parseInt(thaiMatch[6], 10) : 0;
+    if (year > 2400) year -= 543; // Convert Buddhist Year to CE
+    const d = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Format 2: "YYYY-MM-DD HH:mm" or ISO "YYYY-MM-DDTHH:mm:ss"
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const hour = parseInt(isoMatch[4], 10);
+    const minute = parseInt(isoMatch[5], 10);
+    const second = isoMatch[6] ? parseInt(isoMatch[6], 10) : 0;
+    const d = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Format 3: Direct parsing
+  const directDate = new Date(str);
+  if (!isNaN(directDate.getTime())) return directDate;
+
+  // Format 4: Time only "HH:mm" or "HH:mm น."
+  const timeOnlyMatch = str.match(/^(\d{1,2}):(\d{2})/);
+  if (timeOnlyMatch) {
+    const d = new Date(referenceDate);
+    d.setHours(parseInt(timeOnlyMatch[1], 10), parseInt(timeOnlyMatch[2], 10), 0, 0);
+    if (d.getTime() - referenceDate.getTime() > 60 * 60 * 1000) {
+      d.setDate(d.getDate() - 1);
+    }
+    return d;
+  }
+
+  return null;
+}
+
+/**
+ * Evaluates whether a station's data is stale (> 60 minutes, or missing/invalid values).
+ * Returns { isStale: boolean, minutesDiff: number, staleText: string }
+ */
+function evaluateStationStaleness(station, now = new Date()) {
+  const hasNoLevel = station.waterLevel === null || 
+                     station.waterLevel === undefined || 
+                     isNaN(station.waterLevel) || 
+                     station.waterLevel <= 0;
+
+  let gateMissing = false;
+  if (station.isGate) {
+    if (!station.inside || station.inside.level === null || !station.outside || station.outside.level === null) {
+      gateMissing = true;
+    }
+  }
+
+  const rawTimeStr = station.lastValidTime || station.updatedAt || station.time;
+  const parsedDate = parseStationTimestamp(rawTimeStr, now);
+
+  let minutesDiff = 999;
+  let isOlderThan60Min = false;
+
+  if (parsedDate) {
+    const diffMs = now.getTime() - parsedDate.getTime();
+    minutesDiff = Math.max(0, Math.floor(diffMs / (60 * 1000)));
+    if (minutesDiff >= 60) {
+      isOlderThan60Min = true;
+    }
+  } else {
+    isOlderThan60Min = true;
+  }
+
+  const isStale = Boolean(station.isStale || hasNoLevel || gateMissing || isOlderThan60Min);
+
+  let staleText = '';
+  if (isStale) {
+    if (hasNoLevel || gateMissing) {
+      staleText = 'ไม่มีข้อมูลตรวจวัด';
+    } else if (minutesDiff >= 1440) {
+      const days = Math.floor(minutesDiff / 1440);
+      staleText = `เมื่อ ${days} วันที่แล้ว`;
+    } else if (minutesDiff >= 60) {
+      const hours = Math.floor(minutesDiff / 60);
+      staleText = `เมื่อ ${hours} ชม. ที่แล้ว`;
+    } else if (minutesDiff > 0 && minutesDiff < 60) {
+      staleText = `เมื่อ ${minutesDiff} นาทีที่แล้ว`;
+    } else {
+      staleText = 'ข้อมูลเดิม';
+    }
+  }
+
+  return {
+    isStale,
+    minutesDiff,
+    staleText
+  };
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -257,6 +370,7 @@ function evaluateTwoTierAlertStatus() {
  */
 function getProcessedStations() {
   let stations = JSON.parse(JSON.stringify(state.stations));
+  const now = new Date();
 
   // Enforce canonical coordinates, codes, locations, and canal groups from Single Source of Truth
   stations.forEach(s => {
@@ -274,6 +388,12 @@ function getProcessedStations() {
       s.url = canonical.url;
       s.sourceUrl = canonical.url || canonical.sourceUrl;
     }
+
+    // Dynamic Staleness evaluation (60-minute threshold or missing/invalid values)
+    const staleness = evaluateStationStaleness(s, now);
+    s.isStale = staleness.isStale;
+    s.staleMinutes = staleness.minutesDiff;
+    s.staleText = staleness.staleText;
   });
 
   return stations;

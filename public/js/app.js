@@ -92,6 +92,119 @@ function formatDistance(distKm) {
   return `${distKm.toFixed(1)} กม.`;
 }
 
+/**
+ * Universal timestamp parser supporting Thai Buddhist dates, ISO strings, and standard dates.
+ */
+function parseStationTimestamp(timeStr, referenceDate = new Date()) {
+  if (!timeStr) return null;
+  if (timeStr instanceof Date) return isNaN(timeStr.getTime()) ? null : timeStr;
+
+  const str = String(timeStr).trim();
+
+  // Format 1: Thai Buddhist date "DD/MM/BBBB HH:mm" or "DD/MM/BBBB HH:mm:ss" (e.g. "03/10/2569 10:30")
+  const thaiMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (thaiMatch) {
+    const day = parseInt(thaiMatch[1], 10);
+    const month = parseInt(thaiMatch[2], 10) - 1;
+    let year = parseInt(thaiMatch[3], 10);
+    const hour = parseInt(thaiMatch[4], 10);
+    const minute = parseInt(thaiMatch[5], 10);
+    const second = thaiMatch[6] ? parseInt(thaiMatch[6], 10) : 0;
+    if (year > 2400) year -= 543; // Convert Buddhist Year to CE
+    const d = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Format 2: "YYYY-MM-DD HH:mm" or ISO "YYYY-MM-DDTHH:mm:ss"
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (isoMatch) {
+    const year = parseInt(isoMatch[1], 10);
+    const month = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const hour = parseInt(isoMatch[4], 10);
+    const minute = parseInt(isoMatch[5], 10);
+    const second = isoMatch[6] ? parseInt(isoMatch[6], 10) : 0;
+    const d = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Format 3: Direct parsing
+  const directDate = new Date(str);
+  if (!isNaN(directDate.getTime())) return directDate;
+
+  // Format 4: Time only "HH:mm" or "HH:mm น."
+  const timeOnlyMatch = str.match(/^(\d{1,2}):(\d{2})/);
+  if (timeOnlyMatch) {
+    const d = new Date(referenceDate);
+    d.setHours(parseInt(timeOnlyMatch[1], 10), parseInt(timeOnlyMatch[2], 10), 0, 0);
+    if (d.getTime() - referenceDate.getTime() > 60 * 60 * 1000) {
+      d.setDate(d.getDate() - 1);
+    }
+    return d;
+  }
+
+  return null;
+}
+
+/**
+ * Evaluates whether a station's data is stale (> 60 minutes, or missing/invalid values).
+ * Returns { isStale: boolean, minutesDiff: number, staleText: string }
+ */
+function evaluateStationStaleness(station, now = new Date()) {
+  const hasNoLevel = station.waterLevel === null || 
+                     station.waterLevel === undefined || 
+                     isNaN(station.waterLevel) || 
+                     station.waterLevel <= 0;
+
+  let gateMissing = false;
+  if (station.isGate) {
+    if (!station.inside || station.inside.level === null || !station.outside || station.outside.level === null) {
+      gateMissing = true;
+    }
+  }
+
+  const rawTimeStr = station.lastValidTime || station.updatedAt || station.time;
+  const parsedDate = parseStationTimestamp(rawTimeStr, now);
+
+  let minutesDiff = 999;
+  let isOlderThan60Min = false;
+
+  if (parsedDate) {
+    const diffMs = now.getTime() - parsedDate.getTime();
+    minutesDiff = Math.max(0, Math.floor(diffMs / (60 * 1000)));
+    if (minutesDiff >= 60) {
+      isOlderThan60Min = true;
+    }
+  } else {
+    isOlderThan60Min = true;
+  }
+
+  const isStale = Boolean(station.isStale || hasNoLevel || gateMissing || isOlderThan60Min);
+
+  let staleText = '';
+  if (isStale) {
+    if (hasNoLevel || gateMissing) {
+      staleText = 'ไม่มีข้อมูลตรวจวัด';
+    } else if (minutesDiff >= 1440) {
+      const days = Math.floor(minutesDiff / 1440);
+      staleText = `เมื่อ ${days} วันที่แล้ว`;
+    } else if (minutesDiff >= 60) {
+      const hours = Math.floor(minutesDiff / 60);
+      staleText = `เมื่อ ${hours} ชม. ที่แล้ว`;
+    } else if (minutesDiff > 0 && minutesDiff < 60) {
+      staleText = `เมื่อ ${minutesDiff} นาทีที่แล้ว`;
+    } else {
+      staleText = 'ข้อมูลเดิม';
+    }
+  }
+
+  return {
+    isStale,
+    minutesDiff,
+    staleText
+  };
+}
+
 // Initialize on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) {
@@ -203,6 +316,15 @@ function applyDataUpdate(data) {
   appState.warningReason = data.warningReason;
   appState.lastUpdated = data.lastUpdated;
   appState.stations = data.stations || [];
+
+  // Evaluate dynamic staleness based on current client time (> 60 minutes or invalid/missing values)
+  const now = new Date();
+  appState.stations.forEach(station => {
+    const staleness = evaluateStationStaleness(station, now);
+    station.isStale = staleness.isStale;
+    station.staleMinutes = staleness.minutesDiff;
+    station.staleText = staleness.staleText;
+  });
 
   recalculateDistances();
 
@@ -336,9 +458,42 @@ function updateExistingCardsIfPresent(stations) {
       el.className = `px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${statusClass}`;
     });
 
-    // Update timestamp
+    // Update timestamp & stale styling
     document.querySelectorAll(`[data-station-time="${station.id}"]`).forEach(el => {
       if (station.updatedAt) el.textContent = station.updatedAt;
+      if (station.isStale) {
+        el.className = 'text-amber-400 font-mono font-semibold';
+      } else {
+        el.className = 'text-slate-300 font-mono';
+      }
+    });
+
+    // Update stale badge
+    document.querySelectorAll(`[data-station-stale-badge="${station.id}"]`).forEach(badge => {
+      if (station.isStale) {
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    });
+
+    // Update stale text label
+    document.querySelectorAll(`[data-station-stale-text="${station.id}"]`).forEach(el => {
+      if (station.isStale && station.staleText) {
+        el.classList.remove('hidden');
+        el.textContent = `(${station.staleText})`;
+      } else {
+        el.classList.add('hidden');
+      }
+    });
+
+    // Update stale pill in level box
+    document.querySelectorAll(`[data-station-stale-pill="${station.id}"]`).forEach(pill => {
+      if (station.isStale) {
+        pill.classList.remove('hidden');
+      } else {
+        pill.classList.add('hidden');
+      }
     });
 
     // Update distance tag
@@ -362,9 +517,14 @@ function updateExistingCardsIfPresent(stations) {
       el.textContent = `${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'} ม.`;
     });
 
-    // Remove skeleton state from card container
+    // Remove skeleton state from card container and apply stale styling
     document.querySelectorAll(`[data-station-card="${station.id}"]`).forEach(card => {
       card.classList.remove('animate-pulse');
+      if (station.isStale) {
+        card.classList.add('station-stale');
+      } else {
+        card.classList.remove('station-stale');
+      }
       if (station.isOverflow) {
         card.classList.remove('glass-panel-warning', 'border-slate-800');
         card.classList.add('glass-panel-danger');
@@ -737,27 +897,32 @@ function updateMapMarkers() {
       pinClass = 'station-pin-emergency';
       statusLabel = station.isGate && station.alertBadgeText ? station.alertBadgeText : '🚨 ล้นตลิ่ง';
       statusColorClass = 'text-red-400';
-      radarRingsHtml = `
-        <div class="station-radar-ring radar-emergency"></div>
-        <div class="station-radar-ring radar-emergency radar-ring-delayed"></div>
-      `;
+      if (!station.isStale) {
+        radarRingsHtml = `
+          <div class="station-radar-ring radar-emergency"></div>
+          <div class="station-radar-ring radar-emergency radar-ring-delayed"></div>
+        `;
+      }
     } else if (isWarning) {
       pinClass = 'station-pin-warning';
       statusLabel = station.isGate && station.alertBadgeText ? station.alertBadgeText : '⚠️ วิกฤติ';
       statusColorClass = 'text-amber-400';
-      radarRingsHtml = `
-        <div class="station-radar-ring radar-warning"></div>
-        <div class="station-radar-ring radar-warning radar-ring-delayed"></div>
-      `;
+      if (!station.isStale) {
+        radarRingsHtml = `
+          <div class="station-radar-ring radar-warning"></div>
+          <div class="station-radar-ring radar-warning radar-ring-delayed"></div>
+        `;
+      }
     }
 
     // Unique Station Badge Code (ST-1 through ST-9)
     const pinBadge = station.stCode || ('ST-' + (idx + 1));
+    const pinStaleClass = station.isStale ? ' station-pin-stale' : '';
 
     const pinHtml = `
       <div class="station-pin-wrapper">
         ${radarRingsHtml}
-        <div class="station-pin ${pinClass}" title="${station.name}">
+        <div class="station-pin ${pinClass}${pinStaleClass}" title="${station.name}${station.isStale ? ' (ข้อมูลไม่อัปเดต)' : ''}">
           <span>${pinBadge}</span>
         </div>
       </div>
@@ -866,7 +1031,7 @@ function updateMapMarkers() {
         </div>
 
         <h4 class="text-sm font-bold text-white leading-snug">
-          ${station.name}
+          ${station.name} ${station.isStale ? '<span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-flex items-center gap-0.5">[ข้อมูลไม่อัปเดต]</span>' : ''}
         </h4>
         <p class="text-[11px] text-slate-400 mt-0.5">${station.location || ''}</p>
 
@@ -875,7 +1040,7 @@ function updateMapMarkers() {
         ${distText}
 
         <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-          <span>เวลา: <b>${station.updatedAt}</b></span>
+          <span>เวลา: <b class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : ''}">${station.updatedAt}</b> ${station.isStale && station.staleText ? `<span class="text-[10px] text-amber-400/90">(${station.staleText})</span>` : ''}</span>
           <a href="https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1">
             <span>นำทาง</span>
             <i data-lucide="external-link" class="w-3 h-3"></i>
@@ -885,14 +1050,20 @@ function updateMapMarkers() {
     `;
 
     const popupOptions = { maxWidth: station.isGate ? 340 : 320, autoPan: false };
+    const staleTag = station.isStale ? ' [ข้อมูลไม่อัปเดต]' : '';
+    const tooltipText = `<b>${pinBadge}: ${station.name}${staleTag}</b>`;
 
     if (mapStationMarkers[station.id]) {
       mapStationMarkers[station.id].setLatLng([station.lat, station.lng]);
       mapStationMarkers[station.id].setIcon(customIcon);
       mapStationMarkers[station.id].setPopupContent(popupHtml);
+      if (mapStationMarkers[station.id].getTooltip()) {
+        mapStationMarkers[station.id].setTooltipContent(tooltipText);
+      }
     } else {
       const marker = L.marker([station.lat, station.lng], { icon: customIcon }).addTo(leafletMap);
       marker.bindPopup(popupHtml, popupOptions);
+      marker.bindTooltip(tooltipText, { direction: 'top', offset: [0, -14], opacity: 0.95 });
 
       // Stop marker click event from propagating to the map
       marker.on('click', (e) => {
@@ -1261,16 +1432,19 @@ function renderAlertStationCards(stations, tier) {
     // SPECIAL HANDLING FOR SLUICE GATE IN ALERT BANNERS
     if (s.isGate && s.inside && s.outside) {
       return `
-        <div onclick="focusStationOnMap('${s.id}')" class="station-card rounded-xl p-3 border ${bgCard} flex flex-col justify-between shadow-md cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/15 hover:ring-2 hover:ring-white/40">
+        <div data-station-card="${s.id}" onclick="focusStationOnMap('${s.id}')" class="station-card ${s.isStale ? 'station-stale' : ''} rounded-xl p-3 border ${bgCard} flex flex-col justify-between shadow-md cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/15 hover:ring-2 hover:ring-white/40">
           <div>
             <div class="mb-1.5 flex items-center justify-between gap-1 flex-wrap">
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-white/15 text-white border border-white/20">
                 <i data-lucide="crosshair" class="w-2.5 h-2.5 text-sky-300"></i>
                 <span>${targetReason}</span>
               </span>
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0 ${isStationOverflow ? 'bg-red-500 text-white' : 'bg-amber-400 text-slate-950'}">
-                ${s.alertBadgeText || (isStationOverflow ? '🚨 ล้นตลิ่ง' : '⚠️ วิกฤติ')}
-              </span>
+              <div class="flex items-center gap-1">
+                ${s.isStale ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">⚠️ ข้อมูลไม่อัปเดต</span>' : ''}
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0 ${isStationOverflow ? 'bg-red-500 text-white' : 'bg-amber-400 text-slate-950'}">
+                  ${s.alertBadgeText || (isStationOverflow ? '🚨 ล้นตลิ่ง' : '⚠️ วิกฤติ')}
+                </span>
+              </div>
             </div>
 
             <h4 class="text-xs sm:text-sm font-bold text-white leading-tight">
@@ -1304,7 +1478,7 @@ function renderAlertStationCards(stations, tier) {
           </div>
 
           <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
-            <span>เวลา: <b>${s.updatedAt}</b></span>
+            <span>เวลา: <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''}">${s.updatedAt}</b> ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 ml-1">(${s.staleText})</span>` : ''}</span>
             <div class="flex items-center gap-2">
               ${distTag}
               <button onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 transition touch-manipulation" title="ดูตำแหน่งบนแผนที่">
@@ -1345,7 +1519,7 @@ function renderAlertStationCards(stations, tier) {
     }
 
     return `
-      <div onclick="focusStationOnMap('${s.id}')" class="station-card rounded-xl p-3 border ${bgCard} flex flex-col justify-between shadow-md cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/15 hover:ring-2 hover:ring-white/40">
+      <div data-station-card="${s.id}" onclick="focusStationOnMap('${s.id}')" class="station-card ${s.isStale ? 'station-stale' : ''} rounded-xl p-3 border ${bgCard} flex flex-col justify-between shadow-md cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/15 hover:ring-2 hover:ring-white/40">
         <div>
           <!-- Target Station Trigger Tag -->
           <div class="mb-1.5 flex items-center justify-between gap-1 flex-wrap">
@@ -1353,9 +1527,12 @@ function renderAlertStationCards(stations, tier) {
               <i data-lucide="crosshair" class="w-2.5 h-2.5 text-sky-300"></i>
               <span>${targetReason}</span>
             </span>
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0 ${isStationOverflow ? 'bg-red-500 text-white' : 'bg-amber-400 text-slate-950'}">
-              ${isStationOverflow ? '🚨 ล้นตลิ่ง' : '⚠️ วิกฤติ'}
-            </span>
+            <div class="flex items-center gap-1">
+              ${s.isStale ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">⚠️ ข้อมูลไม่อัปเดต</span>' : ''}
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0 ${isStationOverflow ? 'bg-red-500 text-white' : 'bg-amber-400 text-slate-950'}">
+                ${isStationOverflow ? '🚨 ล้นตลิ่ง' : '⚠️ วิกฤติ'}
+              </span>
+            </div>
           </div>
 
           <!-- Station Name -->
@@ -1388,7 +1565,7 @@ function renderAlertStationCards(stations, tier) {
         </div>
 
         <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
-          <span>เวลา: <b>${s.updatedAt}</b></span>
+          <span>เวลา: <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''}">${s.updatedAt}</b> ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 ml-1">(${s.staleText})</span>` : ''}</span>
           <div class="flex items-center gap-2">
             ${distTag}
             <button onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 transition touch-manipulation" title="ดูตำแหน่งบนแผนที่">
@@ -1609,7 +1786,7 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
     : '';
 
   return `
-    <div onclick="focusStationOnMap('${station.id}')" class="station-card rounded-2xl glass-panel p-4 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
+    <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card ${station.isStale ? 'station-stale' : ''} rounded-2xl glass-panel p-4 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
       ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
       ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
@@ -1627,9 +1804,14 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
                 : ''
             }
           </div>
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}">
-            ${station.statusText}
-          </span>
+          <div class="flex items-center gap-1 shrink-0">
+            <span data-station-stale-badge="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${station.isStale ? '' : 'hidden'}">
+              <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
+            </span>
+            <span data-station-status="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass}">
+              ${station.statusText}
+            </span>
+          </div>
         </div>
 
         <h4 class="text-sm font-bold text-white tracking-tight leading-tight line-clamp-2 hover:text-sky-300 transition">
@@ -1648,7 +1830,7 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
               </span>
               <span class="text-xs text-slate-400">ม.รทก.</span>
             </div>
-            ${station.isStale ? '<span class="text-[10px] text-amber-300 font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">🕒 (ข้อมูลเดิม)</span>' : ''}
+            <span data-station-stale-pill="${station.id}" class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 ${station.isStale ? '' : 'hidden'}">🕒 (ข้อมูลเดิม)</span>
           </div>
           <div data-station-diff="${station.id}" class="text-[11px] mt-1 font-semibold ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')} truncate">
             ${station.diffText || ''}
@@ -1681,7 +1863,7 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
 
       <!-- Card Footer -->
       <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-        <span>${station.distanceText || station.updatedAt}</span>
+        <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
         <div class="flex items-center gap-1.5">
           <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="คลิกเพื่อซูมดูตำแหน่งบนแผนที่">
             <i data-lucide="map-pin" class="w-3 h-3 text-sky-400"></i>
@@ -1764,7 +1946,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const gateSlabHeight = Math.min(100, Math.max(15, Math.round((gateOpeningVal / 1.5) * 100)));
 
   return `
-    <div onclick="focusStationOnMap('${station.id}')" class="station-card sluice-gate-card rounded-2xl glass-panel p-4 sm:p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer col-span-1 sm:col-span-2 lg:col-span-2 hover:border-sky-400/50">
+    <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card sluice-gate-card ${station.isStale ? 'station-stale' : ''} rounded-2xl glass-panel p-4 sm:p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer col-span-1 sm:col-span-2 lg:col-span-2 hover:border-sky-400/50">
       ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
       ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
@@ -1786,9 +1968,14 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
                 : ''
             }
           </div>
-          <span class="px-2.5 py-0.5 rounded text-[11px] font-bold border ${badgeClass}">
-            ${station.alertBadgeText || station.statusText}
-          </span>
+          <div class="flex items-center gap-1 shrink-0">
+            <span data-station-stale-badge="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${station.isStale ? '' : 'hidden'}">
+              <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
+            </span>
+            <span class="px-2.5 py-0.5 rounded text-[11px] font-bold border ${badgeClass}">
+              ${station.alertBadgeText || station.statusText}
+            </span>
+          </div>
         </div>
 
         <h4 class="text-sm sm:text-base font-bold text-white tracking-tight leading-tight hover:text-sky-300 transition">
@@ -1939,7 +2126,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
 
       <!-- Card Footer -->
       <div class="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-        <span>เวลา: <b class="text-slate-300 font-mono">${station.updatedAt}</b></span>
+        <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
         <div class="flex items-center gap-1.5">
           <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="คลิกเพื่อซูมดูตำแหน่งบนแผนที่">
             <i data-lucide="map-pin" class="w-3 h-3 text-sky-400"></i>
@@ -2006,7 +2193,7 @@ function renderSection2PinnedPriority() {
       : '';
 
     return `
-      <div onclick="focusStationOnMap('${station.id}')" class="station-card rounded-3xl glass-panel p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
+      <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card ${station.isStale ? 'station-stale' : ''} rounded-3xl glass-panel p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
         ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
         ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
@@ -2031,8 +2218,13 @@ function renderSection2PinnedPriority() {
               </p>
             </div>
 
-            <div class="px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${badgeClass}">
-              <span>${station.statusText}</span>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span data-station-stale-badge="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${station.isStale ? '' : 'hidden'}">
+                <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
+              </span>
+              <div data-station-status="${station.id}" class="px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 ${badgeClass}">
+                <span>${station.statusText}</span>
+              </div>
             </div>
           </div>
 
@@ -2042,7 +2234,7 @@ function renderSection2PinnedPriority() {
               <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800">
                 <div class="flex items-center justify-between text-[11px] font-medium text-slate-400">
                   <span>ระดับน้ำปัจจุบัน</span>
-                  ${station.isStale ? '<span class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30">🕒 (ข้อมูลเดิม)</span>' : ''}
+                  <span data-station-stale-pill="${station.id}" class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 ${station.isStale ? '' : 'hidden'}">🕒 (ข้อมูลเดิม)</span>
                 </div>
                 <div class="flex items-baseline gap-1.5 mt-0.5">
                   <span data-station-level="${station.id}" class="text-3xl font-black text-white font-mono-numbers">
@@ -2090,7 +2282,7 @@ function renderSection2PinnedPriority() {
 
         <!-- Card Footer -->
         <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-          <span>เวลา: <b class="text-slate-300 font-mono">${station.updatedAt}</b></span>
+          <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
           <div class="flex items-center gap-2">
             <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
               <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
