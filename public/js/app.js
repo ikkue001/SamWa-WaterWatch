@@ -101,6 +101,32 @@ function formatWaterLevel(val) {
   return isNaN(num) ? '--' : num.toFixed(2);
 }
 
+/**
+ * Returns formatted canal badge HTML for station cards
+ */
+function getCanalBadgeHtml(station) {
+  if (!station) return '';
+  const canalId = station.canalGroupId;
+  let colorClass = 'bg-slate-800 text-slate-300 border-slate-700';
+  let label = station.canalGroupName || station.canal || 'สายคลอง';
+
+  if (canalId === 'khlong-phraya-suren') {
+    colorClass = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40';
+    label = 'สายคลองพระยาสุเรนทร์';
+  } else if (canalId === 'khlong-sam-wa') {
+    colorClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+    label = 'สายคลองสามวา';
+  } else if (canalId === 'khlong-hokwa') {
+    colorClass = 'bg-sky-500/20 text-sky-300 border-sky-500/40';
+    label = 'สายคลองหกวา';
+  } else if (canalId === 'bma-main') {
+    colorClass = 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+    label = 'จุดวัดหลัก กทม.';
+  }
+
+  return `<span class="px-2 py-0.5 rounded text-[10px] font-bold border ${colorClass} font-sans shrink-0">[${label}]</span>`;
+}
+
 let appState = {
   hasEmergency: false,
   hasWarning: false,
@@ -113,6 +139,9 @@ let appState = {
   userCoords: { lat: 13.8831, lng: 100.7107 }, // Default center: Khlong Sam Wa / Sai Mai / Lam Luk Ka border
   nearestStation: null,
   nearestCanalGroup: null,
+  isJunctionArea: false,
+  junctionCanalGroupIds: [],
+  junctionCanalNames: [],
   selectedCanalTab: null, // user selected tab or auto-detected
   realtimeConnected: false,
   hasRenderedOnce: false
@@ -127,6 +156,7 @@ let leafletMap = null;
 let mapStationMarkers = {};
 let mapUserMarker = null;
 let mapProximityCircle = null;
+let mapJunctionPolylines = [];
 
 // Haversine Formula for distance calculation in kilometers
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
@@ -803,7 +833,7 @@ function initGeolocation(isManual = false) {
 }
 
 /**
- * Calculate distance for each station and determine Nearest Canal Group
+ * Calculate distance for each station and determine Nearest Canal Group & Dual-Canal Junction
  */
 function recalculateDistances() {
   if (!appState.stations || appState.stations.length === 0) return;
@@ -822,9 +852,27 @@ function recalculateDistances() {
 
     const sorted = [...appState.stations].sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
     appState.nearestStation = sorted[0];
-    appState.nearestCanalGroup = appState.nearestStation.canalGroupId || 'khlong-phraya-suren';
+    appState.nearestCanalGroup = appState.nearestStation?.canalGroupId || 'khlong-phraya-suren';
+
+    // 1. Proximity Logic: Check all stations within 5.0 km
+    const nearbyStations = appState.stations.filter(s => s.distanceKm !== null && s.distanceKm !== undefined && s.distanceKm <= 5.0);
+    const nearbyCanalGroupIds = [...new Set(nearbyStations.map(s => s.canalGroupId).filter(Boolean))];
+
+    // If stations within 5km span >= 2 canal groups, mark as junction area
+    if (nearbyCanalGroupIds.length >= 2) {
+      appState.isJunctionArea = true;
+      appState.junctionCanalGroupIds = nearbyCanalGroupIds;
+      appState.junctionCanalNames = nearbyCanalGroupIds.map(id => CANAL_GROUPS_META[id]?.shortName || CANAL_GROUPS_META[id]?.name || id);
+    } else {
+      appState.isJunctionArea = false;
+      appState.junctionCanalGroupIds = nearbyCanalGroupIds;
+      appState.junctionCanalNames = nearbyCanalGroupIds.map(id => CANAL_GROUPS_META[id]?.shortName || CANAL_GROUPS_META[id]?.name || id);
+    }
+
     if (!appState.selectedCanalTab) {
-      appState.selectedCanalTab = appState.nearestCanalGroup;
+      appState.selectedCanalTab = appState.isJunctionArea ? 'nearby-all' : (appState.nearestCanalGroup || 'khlong-phraya-suren');
+    } else if (appState.selectedCanalTab === 'nearby-all' && nearbyStations.length === 0) {
+      appState.selectedCanalTab = appState.nearestCanalGroup || 'khlong-phraya-suren';
     }
   } else {
     appState.stations.forEach(station => {
@@ -833,7 +881,10 @@ function recalculateDistances() {
     });
     appState.nearestStation = appState.stations.find(s => s.id === 'bma_weather_126' || s.id === 'bma-weather-126') || appState.stations[0];
     appState.nearestCanalGroup = 'khlong-phraya-suren';
-    if (!appState.selectedCanalTab) {
+    appState.isJunctionArea = false;
+    appState.junctionCanalGroupIds = [];
+    appState.junctionCanalNames = [];
+    if (!appState.selectedCanalTab || appState.selectedCanalTab === 'nearby-all') {
       appState.selectedCanalTab = 'khlong-phraya-suren';
     }
   }
@@ -1211,6 +1262,54 @@ function updateMapMarkers() {
       mapStationMarkers[station.id] = marker;
     }
   });
+
+  // 3. Highlight dual-canal boundary connections on map (Visual Boundary Connection)
+  if (mapJunctionPolylines && mapJunctionPolylines.length > 0) {
+    mapJunctionPolylines.forEach(layer => {
+      try { leafletMap.removeLayer(layer); } catch (e) {}
+    });
+    mapJunctionPolylines = [];
+  }
+
+  if (appState.isJunctionArea && appState.junctionCanalGroupIds && appState.userCoords) {
+    const userLatLng = [appState.userCoords.lat, appState.userCoords.lng];
+
+    appState.junctionCanalGroupIds.forEach(canalId => {
+      const canalStations = appState.stations
+        .filter(s => s.canalGroupId === canalId && s.distanceKm !== null && s.distanceKm !== undefined && s.lat && s.lng)
+        .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
+
+      if (canalStations.length > 0) {
+        const targetStation = canalStations[0];
+        const canalMeta = CANAL_GROUPS_META[canalId] || {};
+        let strokeColor = '#38bdf8'; // sky
+        if (canalId === 'khlong-phraya-suren') strokeColor = '#818cf8'; // indigo
+        else if (canalId === 'khlong-sam-wa') strokeColor = '#34d399'; // emerald
+        else if (canalId === 'bma-main') strokeColor = '#c084fc'; // purple
+
+        const polyline = L.polyline([userLatLng, [targetStation.lat, targetStation.lng]], {
+          color: strokeColor,
+          weight: 3,
+          opacity: 0.75,
+          dashArray: '8, 8',
+          lineCap: 'round',
+          className: 'junction-boundary-line'
+        }).addTo(leafletMap);
+
+        const canalLabel = canalMeta.shortName || targetStation.canal || 'สายคลอง';
+        polyline.bindTooltip(
+          `📍 เชื่อมต่อ ${canalLabel}: ${targetStation.stCode || ''} ${targetStation.name} (${formatDistance(targetStation.distanceKm)})`,
+          {
+            sticky: true,
+            direction: 'center',
+            className: 'junction-tooltip'
+          }
+        );
+
+        mapJunctionPolylines.push(polyline);
+      }
+    });
+  }
 
   if (window.lucide) window.lucide.createIcons();
 }
@@ -1736,26 +1835,15 @@ function renderSection1SmartCanalGPS() {
   const container = document.getElementById('smartCanalSectionContainer');
   if (!container) return;
 
-  const activeCanalGroupId = appState.selectedCanalTab || appState.nearestCanalGroup || 'khlong-phraya-suren';
+  const isJunction = appState.isJunctionArea;
+  const activeCanalGroupId = appState.selectedCanalTab || (isJunction ? 'nearby-all' : (appState.nearestCanalGroup || 'khlong-phraya-suren'));
+  const isNearbyAllActive = activeCanalGroupId === 'nearby-all';
   const canalMeta = CANAL_GROUPS_META[activeCanalGroupId] || CANAL_GROUPS_META['khlong-phraya-suren'];
 
-  // Canal ordering rank (upstream to downstream geographic flow)
-  const canalOrderRank = {
-    'khlong-hokwa': 1,
-    'khlong-sam-wa': 2,
-    'khlong-phraya-suren': 3,
-    'bma-main': 4
-  };
-
-  // 1. Nearby stations within <= 5.0 km, sorted upstream -> downstream
+  // 1. Nearby stations within <= 5.0 km, strictly sorted by actual distance (ใกล้ ➡️ ไกล)
   const nearbyStations = appState.stations
     .filter(s => s.distanceKm !== null && s.distanceKm !== undefined && s.distanceKm <= 5.0)
-    .sort((a, b) => {
-      const groupRankA = canalOrderRank[a.canalGroupId] || 99;
-      const groupRankB = canalOrderRank[b.canalGroupId] || 99;
-      if (groupRankA !== groupRankB) return groupRankA - groupRankB;
-      return (a.flowOrder || 1) - (b.flowOrder || 1);
-    });
+    .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
 
   // 2. Stations in selected canal line tab, sorted upstream -> downstream (flowOrder ascending)
   const canalStations = appState.stations
@@ -1767,14 +1855,36 @@ function renderSection1SmartCanalGPS() {
   const distanceText = nearest && nearest.distanceText ? nearest.distanceText : '';
 
   // Canal Group Switcher Tabs (Thumb friendly >= 40px touch target)
-  const tabsHtml = Object.keys(CANAL_GROUPS_META).map(k => {
+  let nearbyTabHtml = '';
+  if (isJunction || nearbyStations.length > 0) {
+    const junctionCount = appState.junctionCanalNames?.length || 2;
+    const tabLabel = isJunction
+      ? `⚡ สถานีในรัศมีใกล้คุณ (${junctionCount === 2 ? 'แสดงทั้ง 2 สายคลอง' : `แสดงทั้ง ${junctionCount} สายคลอง`})`
+      : `⚡ สถานีในรัศมีใกล้คุณ (${nearbyStations.length} จุด)`;
+
+    nearbyTabHtml = `
+      <button onclick="switchCanalTab('nearby-all')" class="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 touch-manipulation active:scale-95 ${
+        isNearbyAllActive
+          ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/25 ring-2 ring-amber-400/50'
+          : 'bg-slate-900 text-amber-300 hover:text-amber-100 border border-amber-500/30'
+      }">
+        <span class="w-2 h-2 rounded-full ${isNearbyAllActive ? 'bg-slate-950 animate-pulse' : 'bg-amber-400 live-pulse'}"></span>
+        <span>${tabLabel}</span>
+      </button>
+    `;
+  }
+
+  const canalTabsHtml = Object.keys(CANAL_GROUPS_META).map(k => {
     const meta = CANAL_GROUPS_META[k];
     const isActive = k === activeCanalGroupId;
-    const isNearby = appState.nearestCanalGroup === k;
+    const isNearby = isJunction
+      ? (appState.junctionCanalGroupIds && appState.junctionCanalGroupIds.includes(k))
+      : (appState.nearestCanalGroup === k);
+
     return `
       <button onclick="switchCanalTab('${k}')" class="min-h-[40px] px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 touch-manipulation active:scale-95 ${
         isActive
-          ? 'bg-blue-600 text-white shadow-md'
+          ? 'bg-blue-600 text-white shadow-md font-bold'
           : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
       }">
         ${isNearby ? '<span class="w-2 h-2 rounded-full bg-sky-400 live-pulse"></span>' : ''}
@@ -1783,21 +1893,74 @@ function renderSection1SmartCanalGPS() {
     `;
   }).join('');
 
-  // Proximity 5km Container
-  let nearbyHtml = '';
-  if (nearbyStations.length > 0) {
-    nearbyHtml = `
-      <div class="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-          <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block animate-pulse"></span>
-            <h3 class="text-sm sm:text-base font-bold text-amber-200 flex items-center gap-1.5">
-              <span>🟡 สถานีในรัศมีรอบตัวคุณ (≤ 5 กม.)</span>
+  const tabsHtml = nearbyTabHtml + canalTabsHtml;
+
+  // Header content based on Junction or Single Canal mode
+  let headerBadgeHtml = '';
+  let headerTitleHtml = '';
+  let headerSubtitleHtml = '';
+
+  if (isJunction) {
+    const canalNamesStr = appState.junctionCanalNames.join(' + ');
+    headerBadgeHtml = `
+      <span class="px-3 py-0.5 rounded-full text-xs font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 font-mono">
+        <i data-lucide="navigation" class="w-3.5 h-3.5 text-amber-400"></i>
+        <span>📍 ส่วนที่ 1: สถานีและสายคลองตามตำแหน่ง GPS</span>
+      </span>
+      <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1 font-mono">
+        <i data-lucide="shuffle" class="w-3 h-3 text-sky-400"></i>
+        <span>พื้นที่เชื่อมต่อ ${appState.junctionCanalNames.length} สายคลอง</span>
+      </span>
+      ${
+        distanceText
+          ? `<span class="distance-pill"><i data-lucide="locate" class="w-3 h-3"></i> จุดที่ใกล้สุด: ${distanceText}</span>`
+          : ''
+      }
+    `;
+
+    if (isNearbyAllActive) {
+      headerTitleHtml = `📍 คุณอยู่ในพื้นที่เชื่อมต่อ ${appState.junctionCanalNames.length === 2 ? '2 สายคลอง' : `${appState.junctionCanalNames.length} สายคลอง`}: ${canalNamesStr}`;
+      headerSubtitleHtml = `ตรวจพบสถานีตรวจวัดน้ำในรัศมี 5.0 กม. ครอบคลุมทั้ง ${appState.junctionCanalNames.join(' และ ')} (เรียงตามระยะทางจริง ใกล้ ➡️ ไกล)`;
+    } else {
+      headerTitleHtml = `คุณอยู่ใกล้: ${canalMeta.name} <span class="text-xs font-normal text-sky-300/80">(ในพื้นที่เชื่อมต่อ ${canalNamesStr})</span>`;
+      headerSubtitleHtml = canalMeta.directionNote;
+    }
+  } else {
+    headerBadgeHtml = `
+      <span class="px-3 py-0.5 rounded-full text-xs font-black bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1">
+        <i data-lucide="navigation" class="w-3.5 h-3.5 text-sky-400"></i>
+        <span>📍 ส่วนที่ 1: สถานีและสายคลองตามตำแหน่ง GPS</span>
+      </span>
+      ${
+        (isNearestInThisGroup || isNearbyAllActive) && distanceText
+          ? `<span class="distance-pill"><i data-lucide="locate" class="w-3 h-3"></i> ${distanceText}</span>`
+          : ''
+      }
+    `;
+
+    headerTitleHtml = isNearbyAllActive ? `สถานีในรัศมีใกล้ตัวคุณ (≤ 5 กม.)` : `คุณอยู่ใกล้: ${canalMeta.name}`;
+    headerSubtitleHtml = isNearbyAllActive ? 'สถานีรอบตัวคุณเรียงตามระยะทางจริงจากใกล้ไปไกล' : canalMeta.directionNote;
+  }
+
+  // Body content: Unified nearby distance view OR Single canal flow order view
+  let bodyContentHtml = '';
+
+  if (isNearbyAllActive) {
+    if (nearbyStations.length > 0) {
+      bodyContentHtml = `
+        <div class="mb-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block animate-pulse"></span>
+            <h3 class="text-xs sm:text-sm font-bold text-amber-200 flex items-center gap-1.5">
+              <span>🟡 สถานีในรัศมีรอบตัวคุณ (≤ 5.0 กม.)</span>
               <span class="px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-300 font-mono font-bold">${nearbyStations.length} จุด</span>
             </h3>
           </div>
-          <span class="text-[11px] text-amber-300/80 font-mono">เรียงจากต้นน้ำสู่ปลายน้ำ (Upstream ➡️ Downstream)</span>
+          <div class="flex items-center gap-2 text-[11px] text-amber-300/90 font-mono">
+            <span>⚡ เรียงตามระยะทางจริง (ใกล้ ➡️ ไกล) ไม่แยกสายคลอง</span>
+          </div>
         </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(nearbyStations.length, 4)} gap-4">
           ${nearbyStations.map(station => {
             if (station.isGate || station.id === 'bma_weather_21') {
@@ -1806,19 +1969,39 @@ function renderSection1SmartCanalGPS() {
             return renderCanalFlowCard(station, station.stCode, nearbyStations.length, true);
           }).join('')}
         </div>
-      </div>
-    `;
-  } else {
-    nearbyHtml = `
-      <div class="mb-5 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <i data-lucide="info" class="w-4 h-4 text-sky-400 shrink-0"></i>
-          <span>ขณะนี้ตำแหน่งของคุณอยู่นอกรัศมี 5 กม. ของทุกสถานี (สถานีที่ใกล้ที่สุด: <b class="text-slate-200">${nearest?.name || '--'}</b> ${distanceText ? `— ${distanceText}` : ''})</span>
+      `;
+    } else {
+      bodyContentHtml = `
+        <div class="mb-5 p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-sky-400 shrink-0"></i>
+            <span>ขณะนี้ตำแหน่งของคุณอยู่นอกรัศมี 5 กม. ของทุกสถานี (สถานีที่ใกล้ที่สุด: <b class="text-slate-200">${nearest?.name || '--'}</b> ${distanceText ? `— ${distanceText}` : ''})</span>
+          </div>
+          <button onclick="panMapToUser()" class="min-h-[36px] px-3 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 font-semibold text-xs border border-sky-500/30 shrink-0 flex items-center gap-1 touch-manipulation">
+            <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+            <span>ดูตำแหน่งบนแผนที่</span>
+          </button>
         </div>
-        <button onclick="panMapToUser()" class="min-h-[36px] px-3 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 font-semibold text-xs border border-sky-500/30 shrink-0 flex items-center gap-1 touch-manipulation">
-          <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
-          <span>ดูตำแหน่งบนแผนที่</span>
-        </button>
+      `;
+    }
+  } else {
+    bodyContentHtml = `
+      <div class="mb-3 px-3.5 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-300">
+        <div class="flex items-center gap-2">
+          <i data-lucide="arrow-down-narrow-wide" class="w-4 h-4 text-sky-400 shrink-0"></i>
+          <span class="font-medium">${canalMeta.flowLabel}</span>
+        </div>
+        <span class="text-[11px] text-slate-400 font-mono">เรียงจากต้นน้ำสู่ปลายน้ำ (Upstream ➡️ Downstream)</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(canalStations.length, 4)} gap-4">
+        ${canalStations.map(station => {
+          const isNearby = station.distanceKm !== null && station.distanceKm !== undefined && station.distanceKm <= 5.0;
+          if (station.isGate || station.id === 'bma_weather_21') {
+            return renderSluiceGateTwinCard(station, station.stCode, canalStations.length, isNearby);
+          }
+          return renderCanalFlowCard(station, station.stCode, canalStations.length, isNearby);
+        }).join('')}
       </div>
     `;
   }
@@ -1829,22 +2012,14 @@ function renderSection1SmartCanalGPS() {
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800/80 mb-4">
         <div>
           <div class="flex items-center gap-2 flex-wrap mb-1">
-            <span class="px-3 py-0.5 rounded-full text-xs font-black bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1">
-              <i data-lucide="navigation" class="w-3.5 h-3.5 text-sky-400"></i>
-              <span>📍 ส่วนที่ 1: สถานีและสายคลองตามตำแหน่ง GPS</span>
-            </span>
-            ${
-              isNearestInThisGroup && distanceText
-                ? `<span class="distance-pill"><i data-lucide="locate" class="w-3 h-3"></i> ${distanceText}</span>`
-                : ''
-            }
+            ${headerBadgeHtml}
           </div>
           <h2 class="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-            คุณอยู่ใกล้: ${canalMeta.name}
+            ${headerTitleHtml}
           </h2>
           <p class="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-            <i data-lucide="info" class="w-3.5 h-3.5 text-slate-500"></i>
-            <span>${canalMeta.directionNote}</span>
+            <i data-lucide="info" class="w-3.5 h-3.5 text-slate-500 shrink-0"></i>
+            <span>${headerSubtitleHtml}</span>
           </p>
         </div>
 
@@ -1854,29 +2029,8 @@ function renderSection1SmartCanalGPS() {
         </div>
       </div>
 
-      <!-- Priority 1: Stations <= 5km -->
-      ${nearbyHtml}
-
-      <!-- Priority 2: Canal Flow Sequence -->
-      <div class="mt-2 pt-3 border-t border-slate-800/60">
-        <div class="mb-3 px-3 py-2 rounded-xl bg-slate-900/60 border border-slate-800/80 flex items-center justify-between text-xs text-slate-300">
-          <div class="flex items-center gap-2">
-            <i data-lucide="arrow-down-narrow-wide" class="w-4 h-4 text-blue-400"></i>
-            <span class="font-medium">${canalMeta.flowLabel}</span>
-          </div>
-          <span class="text-[11px] text-slate-500 font-mono">เรียงจากต้นน้ำสู่ปลายน้ำ</span>
-        </div>
-
-        <!-- Stations Cards in Flow Order (Grid: 1 col on mobile, 2 on tablet, up to 4 on desktop) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(canalStations.length, 4)} gap-4">
-          ${canalStations.map(station => {
-            if (station.isGate || station.id === 'bma_weather_21') {
-              return renderSluiceGateTwinCard(station, station.stCode, canalStations.length, false);
-            }
-            return renderCanalFlowCard(station, station.stCode, canalStations.length, false);
-          }).join('')}
-        </div>
-      </div>
+      <!-- Station Cards Content -->
+      ${bodyContentHtml}
     </div>
   `;
 
@@ -1888,6 +2042,7 @@ function switchCanalTab(canalId) {
   renderSection1SmartCanalGPS();
   triggerWaterFillTransitions();
 }
+window.switchCanalTab = switchCanalTab;
 
 /**
  * Render individual card in canal flow sequence
@@ -1933,6 +2088,7 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
             <span class="px-2 py-0.5 rounded-md bg-blue-600/30 border border-blue-400/40 text-blue-300 text-[11px] font-black font-mono flex items-center justify-center">
               ${stCode}
             </span>
+            ${getCanalBadgeHtml(station)}
             ${distancePill}
             ${
               isNearest
@@ -2093,6 +2249,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
             <span class="px-2 py-0.5 rounded-md bg-blue-600/30 border border-blue-400/40 text-blue-300 text-[11px] font-black font-mono flex items-center justify-center">
               ${stCode}
             </span>
+            ${getCanalBadgeHtml(station)}
             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 flex items-center gap-1">
               <i data-lucide="split" class="w-3 h-3 text-cyan-400"></i>
               <span>ปตร. สองฝั่ง</span>
@@ -2347,6 +2504,7 @@ function renderPinnedPriorityCard(station, canon, idx) {
                   <i data-lucide="pin" class="w-3 h-3 text-amber-400"></i>
                   <span>${canon.stCode || `ST-${idx + 1}`}</span>
                 </span>
+                ${getCanalBadgeHtml(station || canon)}
                 ${distanceBadge}
                 <span class="text-[11px] text-slate-500 font-mono">${station?.stationCode ?? canon.stationCode ?? ''}</span>
               </div>
@@ -2463,6 +2621,7 @@ function renderFallbackPinnedCard(canon, idx) {
                 <i data-lucide="pin" class="w-3 h-3 text-amber-400"></i>
                 <span>${stCode}</span>
               </span>
+              ${getCanalBadgeHtml(canon)}
               <span class="text-[11px] text-slate-500 font-mono">${canon?.stationCode || ''}</span>
             </div>
             <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug hover:text-sky-300 transition">

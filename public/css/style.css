@@ -707,3 +707,30 @@ body.emergency-active {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ========================================================
+   DUAL-CANAL JUNCTION BOUNDARY CONNECTION (LEAFLET)
+   ======================================================== */
+.junction-boundary-line {
+  stroke-dasharray: 8, 8;
+  animation: junction-dash-flow 25s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.45));
+}
+
+@keyframes junction-dash-flow {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+.junction-tooltip {
+  background: rgba(15, 23, 42, 0.95) !important;
+  color: #38bdf8 !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-family: 'Prompt', sans-serif !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+  padding: 4px 8px !important;
+}
