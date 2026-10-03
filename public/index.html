@@ -243,7 +243,7 @@
 
     <!-- ================= INTERACTIVE FLOOD MAP (LEAFLET & OSM) ================= -->
     <section id="mapSection" class="space-y-3">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3">
         <div>
           <h2 class="text-base sm:text-lg md:text-xl font-black text-white flex items-center gap-2">
             <span class="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30 shrink-0">
@@ -256,10 +256,10 @@
           </p>
         </div>
 
-        <!-- Map Quick Controls & Legend -->
-        <div class="flex items-center flex-wrap gap-2 text-xs">
-          <!-- Legend pills -->
-          <div class="flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-800 text-[10px] sm:text-[11px] flex-wrap">
+        <!-- Map Quick Controls & Legend Toolbar -->
+        <div class="flex flex-col items-start sm:items-end gap-2 shrink-0">
+          <!-- แถวบน: แถบ Legend สัญลักษณ์สี (ปกติ / วิกฤติ / ล้นตลิ่ง / ข้อมูลไม่อัปเดต / รัศมี 5 กม.) -->
+          <div class="flex items-center gap-1.5 sm:gap-2 bg-slate-900/90 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-800 text-[10px] sm:text-[11px] flex-wrap shadow-sm">
             <span class="inline-flex items-center gap-1 text-emerald-400 font-medium">
               <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> ปกติ
             </span>
@@ -281,15 +281,17 @@
             </span>
           </div>
 
-          <!-- Map Buttons -->
-          <button id="btnMapFitAll" class="min-h-[40px] px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 rounded-xl font-medium transition flex items-center gap-1 text-xs touch-manipulation" title="ย่อ-ขยายให้เห็นครบทุก 9 สถานี">
-            <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
-            <span>แสดง 9 สถานี</span>
-          </button>
-          <button id="btnMapGoUser" class="min-h-[40px] px-3 py-2 bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 rounded-xl font-medium transition flex items-center gap-1 text-xs touch-manipulation" title="เลื่อนมุมมองไปยังตำแหน่ง GPS ของคุณ">
-            <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
-            <span>ตำแหน่งฉัน</span>
-          </button>
+          <!-- แถวล่าง: กลุ่มปุ่ม Action ทั้ง 2 ปุ่ม (flex items-center gap-2 justify-end) -->
+          <div class="flex items-center gap-2 justify-start sm:justify-end shrink-0 w-full sm:w-auto">
+            <button id="btnMapFitAll" type="button" class="min-h-[38px] px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 rounded-xl font-medium transition flex items-center justify-center gap-1.5 text-xs touch-manipulation whitespace-nowrap shadow-sm" title="ย่อ-ขยายให้เห็นครบทุก 9 สถานี">
+              <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+              <span>แสดง 9 สถานี</span>
+            </button>
+            <button id="btnMapGoUser" type="button" class="min-h-[38px] px-3.5 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 rounded-xl font-medium transition flex items-center justify-center gap-1.5 text-xs touch-manipulation whitespace-nowrap shadow-sm" title="เลื่อนมุมมองไปยังตำแหน่ง GPS ของคุณ">
+              <i data-lucide="crosshair" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+              <span>ตำแหน่งฉัน</span>
+            </button>
+          </div>
         </div>
       </div>
 
