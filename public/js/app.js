@@ -3372,20 +3372,45 @@ let waterChartInstance = null;
 let historicalDataCache = null;
 let currentChartStationId = 'thaiwater_k8';
 
+const ALL_CHART_STATIONS = [
+  { id: 'thaiwater_k8', stCode: 'ST-1', name: 'คลองหกวา ลำลูกกา คลอง 8', canal: 'คลองหกวา' },
+  { id: 'bma_wf_k0801', stCode: 'ST-2', name: 'ปตร.คลองแปด ตอนซอย อบจ.ปทุมธานี 2006', canal: 'คลองหกวา' },
+  { id: 'bma_wf_khw01', stCode: 'ST-3', name: 'สถานีสูบน้ำกลางคลองหกวา ตอนถนนนิมิตใหม่', canal: 'คลองหกวา' },
+  { id: 'bma_wf_swa02', stCode: 'ST-4', name: 'คลองสามวา ตอนถนนเทศบาลลำลูกกา 1', canal: 'คลองสามวา' },
+  { id: 'bma_weather_126', stCode: 'ST-5', name: 'คลองพระยาสุเรนทร์ ตอนถนนหนองระแหง', canal: 'คลองพระยาสุเรนทร์' },
+  { id: 'bma_weather_125', stCode: 'ST-6', name: 'คลองพระยาสุเรนทร์ ตอนถนนจตุโชติ', canal: 'คลองพระยาสุเรนทร์' },
+  { id: 'bma_weather_124', stCode: 'ST-7', name: 'ปตร.พระยาสุเรนทร์ ตอนคู้บอน', canal: 'คลองพระยาสุเรนทร์' },
+  { id: 'bma_weather_127', stCode: 'ST-8', name: 'คลองพระยาสุเรนทร์ ตอนปัญญาอินทรา', canal: 'คลองพระยาสุเรนทร์' },
+  { id: 'bma_weather_21', stCode: 'ST-9', name: 'ประตูระบายน้ำคลองสามวา (ถนนประชาร่วมใจ)', canal: 'คลองสามวา' }
+];
+
 async function initWaterHistoryChart() {
+  const overlay = document.getElementById('chartLoadingOverlay');
+  if (overlay) overlay.classList.remove('hidden');
+
+  renderStationSelectorButtons();
+
   try {
-    const res = await fetch('/api/water-history');
+    const res = await fetch(`/api/water-history?station=${encodeURIComponent(currentChartStationId)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     historicalDataCache = data.stations || {};
+    const targetData = data.selectedStation || (data.waterLevels ? data : null);
+    if (targetData) {
+      historicalDataCache[currentChartStationId] = targetData;
+      if (targetData.id) historicalDataCache[targetData.id] = targetData;
+      if (targetData.stCode) historicalDataCache[targetData.stCode] = targetData;
+    }
 
     renderStationSelectorButtons();
-    renderWaterHistoryChart(currentChartStationId);
+    renderWaterHistoryChart(currentChartStationId, targetData);
   } catch (err) {
     console.warn('[Water History Error] Using fallback telemetry history:', err);
     historicalDataCache = generateClientSideHistoryFallback();
     renderStationSelectorButtons();
     renderWaterHistoryChart(currentChartStationId);
+  } finally {
+    if (overlay) overlay.classList.add('hidden');
   }
 }
 window.initWaterHistoryChart = initWaterHistoryChart;
@@ -3393,17 +3418,17 @@ window.initWaterHistoryChart = initWaterHistoryChart;
 function generateClientSideHistoryFallback() {
   const fallback = {};
   const now = new Date();
-  CANONICAL_PINNED_STATIONS.forEach((canon, idx) => {
+  ALL_CHART_STATIONS.forEach((canon, idx) => {
     const times = [];
     const labels = [];
     const levels = [];
-    const base = canon.bankLevel ? canon.bankLevel * 0.5 : 1.0;
+    const base = 0.90 + (idx * 0.05);
     for (let i = 24; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 3600000);
       const h = String(d.getHours()).padStart(2, '0');
       times.push(d.toISOString());
       labels.push(i === 0 ? `${h}:${String(now.getMinutes()).padStart(2, '0')}` : `${h}:00`);
-      const wave = Math.sin((i / 24) * 4 * Math.PI) * 0.08;
+      const wave = Math.sin((i / 24) * 4 * Math.PI) * 0.04;
       levels.push(parseFloat((base + wave).toFixed(2)));
     }
     fallback[canon.id] = {
@@ -3412,9 +3437,12 @@ function generateClientSideHistoryFallback() {
       name: canon.name,
       canal: canon.canal || 'คลองสามวา',
       unit: 'ม.รทก.',
-      bankLevel: canon.bankLevel || 2.0,
-      criticalLevel: canon.criticalLevel || 1.8,
+      criticalThreshold: 1.20,
+      overflowThreshold: 1.50,
+      criticalLevel: 1.20,
+      bankLevel: 1.50,
       currentLevel: levels[levels.length - 1],
+      isEstimated: true,
       trend: 'stable',
       timestamps: times,
       timeLabels: labels,
@@ -3423,7 +3451,7 @@ function generateClientSideHistoryFallback() {
         min: Math.min(...levels),
         max: Math.max(...levels),
         avg: parseFloat((levels.reduce((a, b) => a + b, 0) / levels.length).toFixed(2)),
-        change24h: '+0.02'
+        change24h: '+0.00'
       }
     };
   });
@@ -3432,18 +3460,16 @@ function generateClientSideHistoryFallback() {
 
 function renderStationSelectorButtons() {
   const container = document.getElementById('chartStationButtons');
-  if (!container || !historicalDataCache) return;
+  if (!container) return;
 
-  const stationKeys = Object.keys(historicalDataCache);
-  container.innerHTML = stationKeys.map(stId => {
-    const st = historicalDataCache[stId];
-    const isSelected = stId === currentChartStationId;
+  container.innerHTML = ALL_CHART_STATIONS.map(st => {
+    const isSelected = (currentChartStationId === st.id || currentChartStationId === st.stCode);
     const activeClass = isSelected
       ? 'bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-sm font-bold ring-1 ring-sky-400/30'
       : 'bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border-slate-800';
 
     return `
-      <button type="button" onclick="selectStationChart('${stId}')" class="px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition touch-manipulation flex items-center gap-1.5 shrink-0 ${activeClass}">
+      <button type="button" onclick="selectStationChart('${st.id}')" class="px-3 py-1.5 rounded-xl border text-xs whitespace-nowrap transition touch-manipulation flex items-center gap-1.5 shrink-0 ${activeClass}">
         <span class="font-mono font-bold">${st.stCode}</span>
         <span class="text-[11px] truncate max-w-[120px]">${st.canal}</span>
       </button>
@@ -3451,17 +3477,39 @@ function renderStationSelectorButtons() {
   }).join('');
 }
 
-function selectStationChart(stationId) {
+async function selectStationChart(stationId) {
   currentChartStationId = stationId;
   renderStationSelectorButtons();
-  renderWaterHistoryChart(stationId);
+
+  const overlay = document.getElementById('chartLoadingOverlay');
+  if (overlay) overlay.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/water-history?station=${encodeURIComponent(stationId)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const targetData = data.selectedStation || (data.waterLevels ? data : null);
+    if (targetData) {
+      if (!historicalDataCache) historicalDataCache = {};
+      historicalDataCache[stationId] = targetData;
+      if (targetData.id) historicalDataCache[targetData.id] = targetData;
+      if (targetData.stCode) historicalDataCache[targetData.stCode] = targetData;
+      renderWaterHistoryChart(stationId, targetData);
+    } else {
+      renderWaterHistoryChart(stationId);
+    }
+  } catch (err) {
+    console.warn('[Water History] Failed on-demand fetch for', stationId, err);
+    renderWaterHistoryChart(stationId);
+  } finally {
+    if (overlay) overlay.classList.add('hidden');
+  }
 }
 window.selectStationChart = selectStationChart;
 
 function viewStationHistory(stationId) {
-  if (historicalDataCache && historicalDataCache[stationId]) {
-    selectStationChart(stationId);
-  }
+  selectStationChart(stationId);
   const section = document.getElementById('waterHistorySection');
   if (section) {
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3469,8 +3517,12 @@ function viewStationHistory(stationId) {
 }
 window.viewStationHistory = viewStationHistory;
 
-function renderWaterHistoryChart(stationId) {
-  const st = historicalDataCache ? historicalDataCache[stationId] : null;
+function renderWaterHistoryChart(stationId, liveData) {
+  let st = liveData;
+  if (!st && historicalDataCache) {
+    st = historicalDataCache[stationId] || 
+         Object.values(historicalDataCache).find(s => s && (s.id === stationId || s.stCode === stationId));
+  }
   if (!st) return;
 
   const canvas = document.getElementById('waterHistoryCanvas');
@@ -3478,8 +3530,21 @@ function renderWaterHistoryChart(stationId) {
 
   // Update Section Badges
   const badge = document.getElementById('chartStationBadge');
-  if (badge) badge.textContent = `${st.stCode}: ${st.name}`;
+  if (badge) badge.textContent = `${st.stCode || stationId}: ${st.name}`;
 
+  // Update Source Badge (Real Telemetry vs Estimated)
+  const sourceBadge = document.getElementById('chartSourceBadge');
+  if (sourceBadge) {
+    if (st.isEstimated) {
+      sourceBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1';
+      sourceBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>ประมาณการตามแนวโน้ม</span>';
+    } else {
+      sourceBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1';
+      sourceBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>ข้อมูลจริง กทม.</span>';
+    }
+  }
+
+  // Update Trend Pill
   const trendPill = document.getElementById('chartTrendPill');
   const trendText = document.getElementById('chartTrendText');
   if (trendPill && trendText) {
@@ -3501,9 +3566,13 @@ function renderWaterHistoryChart(stationId) {
   const statMin = document.getElementById('chartStatMin');
   const statChg = document.getElementById('chartStatChange');
 
-  if (statCurr) statCurr.textContent = st.currentLevel.toFixed(2);
-  if (statMax) statMax.textContent = st.stats?.max?.toFixed(2) || '--';
-  if (statMin) statMin.textContent = st.stats?.min?.toFixed(2) || '--';
+  const currVal = (typeof st.currentLevel === 'number')
+    ? st.currentLevel.toFixed(2)
+    : (st.waterLevels && st.waterLevels.length > 0 ? Number(st.waterLevels[st.waterLevels.length - 1]).toFixed(2) : '--');
+
+  if (statCurr) statCurr.textContent = currVal;
+  if (statMax) statMax.textContent = (st.stats && typeof st.stats.max === 'number') ? st.stats.max.toFixed(2) : '--';
+  if (statMin) statMin.textContent = (st.stats && typeof st.stats.min === 'number') ? st.stats.min.toFixed(2) : '--';
   if (statChg) statChg.textContent = st.stats?.change24h || '--';
 
   // Check Chart.js availability
@@ -3513,8 +3582,10 @@ function renderWaterHistoryChart(stationId) {
   }
 
   // Prepare threshold arrays
-  const criticalArr = new Array(st.waterLevels.length).fill(st.criticalLevel);
-  const bankArr = new Array(st.waterLevels.length).fill(st.bankLevel);
+  const criticalVal = st.criticalThreshold ?? st.criticalLevel ?? 1.8;
+  const bankVal = st.overflowThreshold ?? st.bankLevel ?? 2.0;
+  const criticalArr = new Array(st.waterLevels.length).fill(criticalVal);
+  const bankArr = new Array(st.waterLevels.length).fill(bankVal);
 
   const ctx = canvas.getContext('2d');
   const gradient = ctx.createLinearGradient(0, 0, 0, 260);
