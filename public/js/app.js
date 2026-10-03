@@ -209,6 +209,22 @@ function formatDistance(distKm) {
 }
 
 /**
+ * Format station titles with non-breaking spaces and word-break protection
+ * Prevents orphan words like "ซอย", "2006", "ใหม่", "1" from wrapping onto their own lines.
+ */
+function formatStationTitle(name) {
+  if (!name) return '';
+  return name
+    .replace(/ตอนซอย\s+อบจ\.ปทุมธานี\s+2006/g, 'ตอนซอย&nbsp;อบจ.ปทุมธานี&nbsp;2006')
+    .replace(/อบจ\.ปทุมธานี\s+2006/g, 'อบจ.ปทุมธานี&nbsp;2006')
+    .replace(/ซอย\s+อบจ\./g, 'ซอย&nbsp;อบจ.')
+    .replace(/นิมิตใหม่/g, '<span class="inline-block">นิมิตใหม่</span>')
+    .replace(/เทศบาลลำลูกกา\s+1/g, 'เทศบาลลำลูกกา&nbsp;1')
+    .replace(/ลำลูกกา\s+1/g, 'ลำลูกกา&nbsp;1')
+    .replace(/คลอง\s+8/g, 'คลอง&nbsp;8');
+}
+
+/**
  * Universal timestamp parser supporting Thai Buddhist dates, ISO strings, and standard dates.
  */
 function parseStationTimestamp(timeStr, referenceDate = new Date()) {
@@ -639,15 +655,10 @@ function updateExistingCardsIfPresent(stations) {
         }
       });
 
-      // Update source link and styling
+      // Update source link
       const sourceUrl = getStationSourceUrl(station);
       document.querySelectorAll(`[data-station-source-link="${station.id}"]`).forEach(link => {
         link.href = sourceUrl;
-        if (isStale) {
-          link.className = 'px-2.5 py-1 min-h-[36px] rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm flex items-center gap-1 transition touch-manipulation text-[11px]';
-        } else {
-          link.className = 'px-2.5 py-1 min-h-[36px] rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium flex items-center gap-1 transition touch-manipulation text-[11px]';
-        }
       });
 
       // Update distance tag
@@ -1931,7 +1942,7 @@ function renderAlertStationCards(stations, tier) {
             <h4 class="text-xs sm:text-sm font-bold text-white leading-tight flex items-center gap-1.5 flex-wrap">
               ${s.stCode ? `<span class="text-amber-300 font-mono font-bold">${s.stCode}</span>` : ''}
               ${getCanalBadgeHtml(s)}
-              <span>${s.name}</span>
+              <span>${formatStationTitle(s.name)}</span>
             </h4>
 
             <!-- Dual Side Water Levels in Alert Banner -->
@@ -1960,18 +1971,23 @@ function renderAlertStationCards(stations, tier) {
             </div>
           </div>
 
-          <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
-            <span>เวลา: <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''}">${s.updatedAt}</b> ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 ml-1">(${s.staleText})</span>` : ''}</span>
-            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          <div class="mt-auto pt-2.5 border-t border-white/10 flex items-center justify-between gap-2 text-[11px] text-white/70 w-full shrink-0">
+            <div class="flex items-center gap-1 min-w-0 text-white/70 text-[11px] truncate">
+              <span class="shrink-0 text-white/50">เวลา:</span>
+              <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''} shrink-0">${s.updatedAt}</b>
+              ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 truncate">(${s.staleText})</span>` : ''}
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
               ${distTag}
-              <a href="${getStationSourceUrl(s)}" data-station-source-link="${s.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="min-h-[36px] px-2.5 py-1 rounded-lg ${s.isStale ? 'bg-amber-400 text-amber-950 font-bold border border-amber-300 shadow-sm' : 'bg-white/20 hover:bg-white/30 text-white font-bold'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
-                <span>🌐 ตรวจสอบต้นทาง</span>
-                <i data-lucide="external-link" class="w-3 h-3"></i>
-              </a>
-              <button onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 transition touch-manipulation" title="ดูตำแหน่งบนแผนที่">
-                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
-                <span>แผนที่</span>
+              <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 text-[11px] transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 shrink-0"></i>
+                <span>ดูบนแผนที่</span>
               </button>
+              <a href="${getStationSourceUrl(s)}" data-station-source-link="${s.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold border border-white/20 flex items-center gap-1 text-[11px] transition touch-manipulation whitespace-nowrap" title="ตรวจสอบต้นทาง">
+                <i data-lucide="globe" class="w-3.5 h-3.5 shrink-0"></i>
+                <span>ลิงก์ต้นทาง</span>
+                <i data-lucide="external-link" class="w-3 h-3 text-white/70 shrink-0"></i>
+              </a>
             </div>
           </div>
         </div>
@@ -2026,7 +2042,7 @@ function renderAlertStationCards(stations, tier) {
           <h4 class="text-xs sm:text-sm font-bold text-white leading-tight flex items-center gap-1.5 flex-wrap">
             ${s.stCode ? `<span class="text-amber-300 font-mono font-bold">${s.stCode}</span>` : ''}
             ${getCanalBadgeHtml(s)}
-            <span>${s.name}</span>
+            <span>${formatStationTitle(s.name)}</span>
           </h4>
 
           <!-- Big Water Level -->
@@ -2053,18 +2069,23 @@ function renderAlertStationCards(stations, tier) {
           </div>
         </div>
 
-        <div class="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[11px] text-white/70">
-          <span>เวลา: <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''}">${s.updatedAt}</b> ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 ml-1">(${s.staleText})</span>` : ''}</span>
-          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+        <div class="mt-auto pt-2.5 border-t border-white/10 flex items-center justify-between gap-2 text-[11px] text-white/70 w-full shrink-0">
+          <div class="flex items-center gap-1 min-w-0 text-white/70 text-[11px] truncate">
+            <span class="shrink-0 text-white/50">เวลา:</span>
+            <b class="${s.isStale ? 'text-amber-300 font-mono font-semibold' : ''} shrink-0">${s.updatedAt}</b>
+            ${s.isStale && s.staleText ? `<span class="text-[10px] text-amber-300/90 truncate">(${s.staleText})</span>` : ''}
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
             ${distTag}
-            <a href="${getStationSourceUrl(s)}" data-station-source-link="${s.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="min-h-[36px] px-2.5 py-1 rounded-lg ${s.isStale ? 'bg-amber-400 text-amber-950 font-bold border border-amber-300 shadow-sm' : 'bg-white/20 hover:bg-white/30 text-white font-bold'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
-              <span>🌐 ตรวจสอบต้นทาง</span>
-              <i data-lucide="external-link" class="w-3 h-3"></i>
-            </a>
-            <button onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="min-h-[36px] px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 transition touch-manipulation" title="ดูตำแหน่งบนแผนที่">
-              <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
-              <span>แผนที่</span>
+            <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${s.id}')" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold flex items-center gap-1 text-[11px] transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 shrink-0"></i>
+              <span>ดูบนแผนที่</span>
             </button>
+            <a href="${getStationSourceUrl(s)}" data-station-source-link="${s.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 text-white font-bold border border-white/20 flex items-center gap-1 text-[11px] transition touch-manipulation whitespace-nowrap" title="ตรวจสอบต้นทาง">
+              <i data-lucide="globe" class="w-3.5 h-3.5 shrink-0"></i>
+              <span>ลิงก์ต้นทาง</span>
+              <i data-lucide="external-link" class="w-3 h-3 text-white/70 shrink-0"></i>
+            </a>
           </div>
         </div>
       </div>
@@ -2335,14 +2356,14 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
     : '';
 
   return `
-    <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card ${station.isStale ? 'station-stale' : ''} rounded-2xl glass-panel p-4 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
+    <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card ${station.isStale ? 'station-stale' : ''} rounded-2xl glass-panel p-4 border ${cardBorder} flex flex-col justify-between h-full relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
       ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
       ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
       <div>
         <!-- Sequence & Nearest indicator -->
-        <div class="flex items-center justify-between gap-1 mb-2">
-          <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="flex items-start justify-between gap-1.5 mb-2">
+          <div class="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
             <span class="px-2 py-0.5 rounded-md bg-blue-600/30 border border-blue-400/40 text-blue-300 text-[11px] font-black font-mono flex items-center justify-center">
               ${stCode}
             </span>
@@ -2354,7 +2375,7 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
                 : ''
             }
           </div>
-          <div class="flex items-center gap-1 shrink-0">
+          <div class="flex flex-wrap items-center gap-1 justify-end shrink-0 text-[10px] max-w-[45%]">
             <span data-station-stale-badge="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${station.isStale ? '' : 'hidden'}">
               <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
             </span>
@@ -2364,8 +2385,8 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
           </div>
         </div>
 
-        <h4 class="text-sm font-bold text-white tracking-tight leading-tight line-clamp-2 hover:text-sky-300 transition">
-          ${station.name}
+        <h4 class="text-sm font-medium sm:font-bold text-white tracking-tight leading-tight line-clamp-2 hover:text-sky-300 transition">
+          ${formatStationTitle(station.name)}
         </h4>
         <p class="text-[10px] text-slate-400 mt-0.5 truncate">
           ${station.location || ''}
@@ -2412,19 +2433,21 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
       </div>
 
       <!-- Card Footer -->
-      <div class="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-        <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <a href="${getStationSourceUrl(station)}" data-station-source-link="${station.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[36px] rounded-lg ${station.isStale ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
-            <span>🌐 ตรวจสอบต้นทาง</span>
-            <i data-lucide="external-link" class="w-3 h-3"></i>
-          </a>
-          <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="คลิกเพื่อซูมดูตำแหน่งบนแผนที่">
-            <i data-lucide="map-pin" class="w-3 h-3 text-sky-400"></i>
-            <span>แผนที่</span>
+      <div class="mt-auto pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-400 w-full shrink-0">
+        <div class="flex items-center gap-1 min-w-0 text-slate-400 text-[11px] truncate">
+          <span class="shrink-0 text-slate-500">เวลา:</span>
+          <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'} shrink-0">${station.updatedAt}</b>
+          <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 font-sans truncate ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || 'ข้อมูลเดิม'})</span>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+            <span>ดูบนแผนที่</span>
           </button>
-          <a href="https://www.google.com/maps?q=${station.lat},${station.lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
-            <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
+          <a href="${getStationSourceUrl(station)}" data-station-source-link="${station.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ตรวจสอบต้นทาง">
+            <i data-lucide="globe" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            <span>ลิงก์ต้นทาง</span>
+            <i data-lucide="external-link" class="w-3 h-3 text-slate-500 shrink-0"></i>
           </a>
         </div>
       </div>
@@ -2500,14 +2523,14 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const gateSlabHeight = Math.min(100, Math.max(15, Math.round((gateOpeningVal / 1.5) * 100)));
 
   return `
-    <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card sluice-gate-card ${station.isStale ? 'station-stale' : ''} rounded-2xl glass-panel p-4 sm:p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer col-span-1 sm:col-span-2 lg:col-span-2 hover:border-sky-400/50">
+    <div data-station-card="${station.id}" onclick="focusStationOnMap('${station.id}')" class="station-card sluice-gate-card ${station.isStale ? 'station-stale' : ''} rounded-2xl glass-panel p-4 sm:p-5 border ${cardBorder} flex flex-col justify-between h-full relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer col-span-1 sm:col-span-2 lg:col-span-2 hover:border-sky-400/50">
       ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
       ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
       <div>
         <!-- Top Header & Badges -->
-        <div class="flex items-center justify-between gap-1 mb-2">
-          <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="flex items-start justify-between gap-1.5 mb-2">
+          <div class="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
             <span class="px-2 py-0.5 rounded-md bg-blue-600/30 border border-blue-400/40 text-blue-300 text-[11px] font-black font-mono flex items-center justify-center">
               ${stCode}
             </span>
@@ -2523,7 +2546,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
                 : ''
             }
           </div>
-          <div class="flex items-center gap-1 shrink-0">
+          <div class="flex flex-wrap items-center gap-1 justify-end shrink-0 text-[10px] max-w-[45%]">
             <span data-station-stale-badge="${station.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${station.isStale ? '' : 'hidden'}">
               <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
             </span>
@@ -2533,8 +2556,8 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
           </div>
         </div>
 
-        <h4 class="text-sm sm:text-base font-bold text-white tracking-tight leading-tight hover:text-sky-300 transition">
-          ${station.name}
+        <h4 class="text-sm sm:text-base font-medium sm:font-bold text-white tracking-tight leading-tight line-clamp-2 hover:text-sky-300 transition">
+          ${formatStationTitle(station.name)}
         </h4>
         <p class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 truncate">
           ${station.location || 'ถนนประชาร่วมใจ เขตคลองสามวา'}
@@ -2680,19 +2703,21 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
       </div>
 
       <!-- Card Footer -->
-      <div class="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-        <span>เวลา: <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${station.updatedAt}</b> <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || ''})</span></span>
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <a href="${getStationSourceUrl(station)}" data-station-source-link="${station.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[36px] rounded-lg ${station.isStale ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
-            <span>🌐 ตรวจสอบต้นทาง</span>
-            <i data-lucide="external-link" class="w-3 h-3"></i>
-          </a>
-          <button onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="คลิกเพื่อซูมดูตำแหน่งบนแผนที่">
-            <i data-lucide="map-pin" class="w-3 h-3 text-sky-400"></i>
-            <span>แผนที่</span>
+      <div class="mt-auto pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-400 w-full shrink-0">
+        <div class="flex items-center gap-1 min-w-0 text-slate-400 text-[11px] truncate">
+          <span class="shrink-0 text-slate-500">เวลา:</span>
+          <b data-station-time="${station.id}" class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'} shrink-0">${station.updatedAt}</b>
+          <span data-station-stale-text="${station.id}" class="text-[10px] text-amber-400/90 font-sans truncate ${station.isStale && station.staleText ? '' : 'hidden'}">(${station.staleText || 'ข้อมูลเดิม'})</span>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${station.id}')" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+            <span>ดูบนแผนที่</span>
           </button>
-          <a href="https://www.google.com/maps?q=${station.lat},${station.lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
-            <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
+          <a href="${getStationSourceUrl(station)}" data-station-source-link="${station.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ตรวจสอบต้นทาง">
+            <i data-lucide="globe" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            <span>ลิงก์ต้นทาง</span>
+            <i data-lucide="external-link" class="w-3 h-3 text-slate-500 shrink-0"></i>
           </a>
         </div>
       </div>
@@ -2757,7 +2782,7 @@ function renderPinnedPriorityCard(station, canon, idx) {
     const lng = station?.lng ?? canon.lng ?? 100.75;
 
     return `
-      <div data-station-card="${canon.id}" onclick="focusStationOnMap('${canon.id}')" class="station-card ${isStale ? 'station-stale' : ''} rounded-3xl glass-panel p-5 border ${cardBorder} flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50 min-h-[420px]">
+      <div data-station-card="${canon.id}" onclick="focusStationOnMap('${canon.id}')" class="station-card ${isStale ? 'station-stale' : ''} rounded-3xl glass-panel p-5 border ${cardBorder} flex flex-col justify-between h-full relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
         ${isDanger ? '<div class="absolute inset-0 bg-red-600/10 pointer-events-none"></div>' : ''}
         ${isWarning ? '<div class="absolute inset-0 bg-amber-500/5 pointer-events-none"></div>' : ''}
 
@@ -2774,8 +2799,8 @@ function renderPinnedPriorityCard(station, canon, idx) {
                 ${distanceBadge}
                 <span class="text-[11px] text-slate-500 font-mono">${station?.stationCode ?? canon.stationCode ?? ''}</span>
               </div>
-              <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug hover:text-sky-300 transition">
-                ${station?.name ?? canon.name}
+              <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug line-clamp-2 hover:text-sky-300 transition">
+                ${formatStationTitle(station?.name ?? canon.name)}
               </h3>
               <p class="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
                 <i data-lucide="map-pin" class="w-3 h-3 text-slate-500"></i>
@@ -2783,7 +2808,7 @@ function renderPinnedPriorityCard(station, canon, idx) {
               </p>
             </div>
 
-            <div class="flex items-center gap-1.5 shrink-0">
+            <div class="flex flex-wrap items-center gap-1 justify-end shrink-0 text-[10px] max-w-[45%]">
               <span data-station-stale-badge="${canon.id}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm ${isStale ? '' : 'hidden'}">
                 <i data-lucide="clock" class="w-3 h-3 text-amber-400"></i> ข้อมูลไม่อัปเดต
               </span>
@@ -2846,19 +2871,21 @@ function renderPinnedPriorityCard(station, canon, idx) {
         </div>
 
         <!-- Card Footer -->
-        <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-          <span>เวลา: <b data-station-time="${canon.id}" class="${isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'}">${updateTime}</b> <span data-station-stale-text="${canon.id}" class="text-[10px] text-amber-400/90 ml-1 font-sans ${isStale && staleText ? '' : 'hidden'}">(${staleText})</span></span>
-          <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-            <a href="${getStationSourceUrl(station || canon)}" data-station-source-link="${canon.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 min-h-[36px] rounded-lg ${isStale ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm' : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium'} flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
-              <span>🌐 ตรวจสอบต้นทาง</span>
-              <i data-lucide="external-link" class="w-3 h-3"></i>
-            </a>
-            <button onclick="event.stopPropagation(); focusStationOnMap('${canon.id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
-              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
+        <div class="mt-auto pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-400 w-full shrink-0">
+          <div class="flex items-center gap-1 min-w-0 text-slate-400 text-[11px] truncate">
+            <span class="shrink-0 text-slate-500">เวลา:</span>
+            <b data-station-time="${canon.id}" class="${isStale ? 'text-amber-400 font-mono font-semibold' : 'text-slate-300 font-mono'} shrink-0">${updateTime}</b>
+            <span data-station-stale-text="${canon.id}" class="text-[10px] text-amber-400/90 font-sans truncate ${isStale && staleText ? '' : 'hidden'}">(${staleText || 'ข้อมูลเดิม'})</span>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${canon.id}')" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
               <span>ดูบนแผนที่</span>
             </button>
-            <a href="https://www.google.com/maps?q=${lat},${lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
-              <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
+            <a href="${getStationSourceUrl(station || canon)}" data-station-source-link="${canon.id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ตรวจสอบต้นทาง">
+              <i data-lucide="globe" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+              <span>ลิงก์ต้นทาง</span>
+              <i data-lucide="external-link" class="w-3 h-3 text-slate-500 shrink-0"></i>
             </a>
           </div>
         </div>
@@ -2882,7 +2909,7 @@ function renderFallbackPinnedCard(canon, idx) {
   const lng = canon?.lng ?? 100.75;
 
   return `
-    <div data-station-card="${id}" onclick="focusStationOnMap('${id}')" class="station-card rounded-3xl glass-panel p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50 min-h-[420px]">
+    <div data-station-card="${id}" onclick="focusStationOnMap('${id}')" class="station-card rounded-3xl glass-panel p-5 border border-slate-800 flex flex-col justify-between h-full relative overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10 cursor-pointer hover:border-sky-400/50">
       <div>
         <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
           <div>
@@ -2894,8 +2921,8 @@ function renderFallbackPinnedCard(canon, idx) {
               ${getCanalBadgeHtml(canon)}
               <span class="text-[11px] text-slate-500 font-mono">${canon?.stationCode || ''}</span>
             </div>
-            <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug hover:text-sky-300 transition">
-              ${name}
+            <h3 class="text-base sm:text-lg font-bold text-white tracking-tight leading-snug line-clamp-2 hover:text-sky-300 transition">
+              ${formatStationTitle(name)}
             </h3>
             <p class="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
               <i data-lucide="map-pin" class="w-3 h-3 text-slate-500"></i>
@@ -2903,7 +2930,7 @@ function renderFallbackPinnedCard(canon, idx) {
             </p>
           </div>
 
-          <div class="flex items-center gap-1.5 shrink-0">
+          <div class="flex flex-wrap items-center gap-1 justify-end shrink-0 text-[10px] max-w-[45%]">
             <div data-station-status="${id}" class="px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 shrink-0 bg-slate-800 text-slate-300 border-slate-700">
               <span>ไม่มีข้อมูล / รอตรวจวัด</span>
             </div>
@@ -2956,19 +2983,21 @@ function renderFallbackPinnedCard(canon, idx) {
         </div>
       </div>
 
-      <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-        <span>เวลา: <b data-station-time="${id}" class="text-slate-300 font-mono">-</b></span>
-        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <a href="${getStationSourceUrl(canon)}" data-station-source-link="${id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 min-h-[36px] rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 font-bold shadow-sm flex items-center gap-1 transition touch-manipulation text-[11px]" title="ตรวจสอบข้อมูลต้นทางอย่างเป็นทางการ">
-            <span>🌐 ตรวจสอบต้นทาง</span>
-            <i data-lucide="external-link" class="w-3 h-3"></i>
-          </a>
-          <button onclick="event.stopPropagation(); focusStationOnMap('${id}')" class="px-3 py-1.5 min-h-[36px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1 font-semibold transition touch-manipulation" title="ซูมไปยังจุดนี้บนแผนที่">
-            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400"></i>
+      <!-- Card Footer -->
+      <div class="mt-auto pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-400 w-full shrink-0">
+        <div class="flex items-center gap-1 min-w-0 text-slate-400 text-[11px] truncate">
+          <span class="shrink-0 text-slate-500">เวลา:</span>
+          <b data-station-time="${id}" class="text-slate-300 font-mono shrink-0">-</b>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${id}')" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-sky-500/10 hover:bg-sky-500/20 active:bg-sky-500/30 text-sky-300 border border-sky-500/30 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
+            <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
             <span>ดูบนแผนที่</span>
           </button>
-          <a href="https://www.google.com/maps?q=${lat},${lng}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="p-1.5 min-h-[36px] min-w-[36px] flex items-center justify-center hover:text-sky-300 transition touch-manipulation" title="เปิด Google Maps">
-            <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
+          <a href="${getStationSourceUrl(canon)}" data-station-source-link="${id}" onclick="event.stopPropagation()" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1 text-[11px] font-semibold transition touch-manipulation whitespace-nowrap" title="ตรวจสอบต้นทาง">
+            <i data-lucide="globe" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            <span>ลิงก์ต้นทาง</span>
+            <i data-lucide="external-link" class="w-3 h-3 text-slate-500 shrink-0"></i>
           </a>
         </div>
       </div>

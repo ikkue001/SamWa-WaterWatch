@@ -188,8 +188,13 @@ body.emergency-active {
   box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
 }
 
-/* Station Cards: Smooth Hover Elevation and Soft Luminous Atmospheric Shadow */
+/* Station Cards: Equal Heights, Smooth Hover Elevation and Soft Luminous Atmospheric Shadow */
 .station-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  overflow: hidden;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
   will-change: transform, box-shadow;
 }
@@ -208,6 +213,15 @@ body.emergency-active {
 .glass-panel-danger.station-card:hover {
   box-shadow: 0 16px 30px -8px rgba(239, 68, 68, 0.3), 0 0 22px rgba(239, 68, 68, 0.22);
   border-color: rgba(239, 68, 68, 0.85);
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* ========================================================
