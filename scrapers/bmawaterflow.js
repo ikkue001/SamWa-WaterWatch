@@ -134,6 +134,7 @@ async function fetchBmaWaterflowStations() {
 
       const isOverflow = (finalWaterLevel >= bankLevel);
       const isWarning = !isOverflow && (finalWaterLevel >= criticalLevel);
+      const isCritical = (finalWaterLevel >= criticalLevel);
 
       let tier = 'NORMAL';
       let statusText = 'ปกติ';
@@ -187,6 +188,7 @@ async function fetchBmaWaterflowStations() {
         storagePercent,
         isOverflow,
         isWarning,
+        isCritical,
         tier,
         statusText: isStale ? `${statusText} (ข้อมูลเดิม)` : statusText,
         statusSeverity,

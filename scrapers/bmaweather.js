@@ -452,6 +452,7 @@ async function fetchSingleWeatherStation(cfg) {
       storagePercent: parseFloat(((primaryLevel / bankLevel) * 100).toFixed(1)),
       isOverflow,
       isWarning: isWarningStatus,
+      isCritical: (inCritical || outCritical),
       tier,
       statusText: isStale ? `${statusText} (ข้อมูลเดิม)` : statusText,
       alertBadgeText,
@@ -516,6 +517,7 @@ async function fetchSingleWeatherStation(cfg) {
   // Two-Tier Alert Logic
   const isOverflow = (finalWaterLevel !== null && finalWaterLevel >= bankLevel);
   const isWarning = !isOverflow && (finalWaterLevel !== null && finalWaterLevel >= criticalLevel);
+  const isCritical = (finalWaterLevel !== null && finalWaterLevel >= criticalLevel);
 
   let tier = 'NORMAL';
   let statusText = 'ปกติ';
@@ -576,6 +578,7 @@ async function fetchSingleWeatherStation(cfg) {
     storagePercent,
     isOverflow,
     isWarning,
+    isCritical,
     tier,
     statusText: isStale ? `${statusText} (ข้อมูลเดิม)` : statusText,
     statusSeverity,

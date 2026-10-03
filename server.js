@@ -394,6 +394,12 @@ function getProcessedStations() {
     s.isStale = staleness.isStale;
     s.staleMinutes = staleness.minutesDiff;
     s.staleText = staleness.staleText;
+
+    // Explicitly guarantee isCritical boolean on all station payloads
+    const rawLvl = s.waterLevel !== null && s.waterLevel !== undefined ? parseFloat(s.waterLevel) : null;
+    const critLvl = s.criticalLevel !== null && s.criticalLevel !== undefined ? parseFloat(s.criticalLevel) : null;
+    const isCritNum = (rawLvl !== null && critLvl !== null && !isNaN(rawLvl) && !isNaN(critLvl) && rawLvl >= critLvl);
+    s.isCritical = Boolean(s.isCritical || s.isWarning || s.isOverflow || isCritNum);
   });
 
   return stations;

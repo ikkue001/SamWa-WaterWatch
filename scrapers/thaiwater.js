@@ -134,6 +134,7 @@ async function fetchThaiwaterStation() {
       storagePercent,
       isOverflow,
       isWarning,
+      isCritical: (finalWaterLevel !== null && finalWaterLevel >= criticalLevel),
       tier,
       statusText: isStale ? `${statusText} (ข้อมูลเดิม)` : statusText,
       statusSeverity,

@@ -410,6 +410,12 @@ function applyDataUpdate(data) {
     station.isStale = staleness.isStale;
     station.staleMinutes = staleness.minutesDiff;
     station.staleText = staleness.staleText;
+
+    // Explicitly guarantee isCritical boolean on all stations (protects ST-5 against missing flags/type mismatches)
+    const rawLvl = station.waterLevel !== null && station.waterLevel !== undefined ? parseFloat(station.waterLevel) : null;
+    const critLvl = station.criticalLevel !== null && station.criticalLevel !== undefined ? parseFloat(station.criticalLevel) : null;
+    const isCritNum = (rawLvl !== null && critLvl !== null && !isNaN(rawLvl) && !isNaN(critLvl) && rawLvl >= critLvl);
+    station.isCritical = Boolean(station.isCritical || station.isWarning || station.isOverflow || isCritNum);
   });
 
   recalculateDistances();
@@ -1391,36 +1397,71 @@ function panMapToUser() {
  * Visual Alerts Only: No sirens, beeps, or audio alerts.
  */
 
-function isTargetAlertStation(station) {
-  if (!station) return false;
+/**
+ * Helper to check if a station has reached or exceeded critical threshold (Tier 2: Warning)
+ * Checks isCritical, isWarning, isOverflow, status, statusText, and double-checks numeric values (prevent type mismatch for ST-5)
+ */
+function isStationCritical(s) {
+  if (!s) return false;
+  if (s.isCritical === true || s.isWarning === true || s.isOverflow === true) return true;
+  if (s.tier === 'WARNING' || s.tier === 'EMERGENCY') return true;
+  if (s.status === 'warning' || s.status === 'danger' || s.statusSeverity === 'danger') return true;
+  if (s.statusText && (s.statusText.includes('วิกฤติ') || s.statusText.includes('ล้นตลิ่ง'))) return true;
 
-  // 1. สถานีที่ใกล้ตำแหน่งผู้ใช้ที่สุด (Nearest Station ตามระยะ GPS)
-  if (appState.nearestStation && station.id === appState.nearestStation.id) {
-    return true;
+  // Dual-sided sluice gate check (e.g. ST-9)
+  if (s.isGate) {
+    if (s.inside && (s.inside.isWarning || s.inside.isOverflow || s.inside.isCritical)) return true;
+    if (s.outside && (s.outside.isWarning || s.outside.isOverflow || s.outside.isCritical)) return true;
+    const inLvl = s.inside?.level !== null && s.inside?.level !== undefined ? parseFloat(s.inside.level) : null;
+    const inCrit = s.inside?.critical !== null && s.inside?.critical !== undefined ? parseFloat(s.inside.critical) : null;
+    if (inLvl !== null && inCrit !== null && !isNaN(inLvl) && !isNaN(inCrit) && inLvl >= inCrit) return true;
+    const outLvl = s.outside?.level !== null && s.outside?.level !== undefined ? parseFloat(s.outside.level) : null;
+    const outCrit = s.outside?.critical !== null && s.outside?.critical !== undefined ? parseFloat(s.outside.critical) : null;
+    if (outLvl !== null && outCrit !== null && !isNaN(outLvl) && !isNaN(outCrit) && outLvl >= outCrit) return true;
   }
 
-  // 2. สถานี คลองหกวา ลำลูกกา คลอง 8 (ST-1)
-  if (
-    station.stCode === 'ST-1' ||
-    station.id === 'thaiwater_k8' ||
-    station.id === 'thaiwater-lamlukka-k8' ||
-    station.id === 'thaiwater-คลองหกวา-คลอง8' ||
-    (station.name && station.name.includes('คลองหกวา ลำลูกกา คลอง 8')) ||
-    (station.name && station.name.includes('คลอง 8'))
-  ) {
-    return true;
+  // Numeric double-check (protects ST-5 and all stations against type mismatches or unparsed strings)
+  const rawLvl = s.waterLevel ?? s.level ?? s.inside?.level ?? null;
+  const rawCrit = s.criticalLevel ?? s.inside?.critical ?? null;
+  if (rawLvl !== null && rawCrit !== null) {
+    const lvlNum = parseFloat(rawLvl);
+    const critNum = parseFloat(rawCrit);
+    if (!isNaN(lvlNum) && !isNaN(critNum) && lvlNum >= critNum) {
+      return true;
+    }
   }
 
-  // 3. จุดวัด สถานีสูบน้ำกลางคลองหกวา ตอนถนนนิมิตใหม่ (ST-3)
-  if (
-    station.stCode === 'ST-3' ||
-    station.id === 'bma_wf_khw01' ||
-    station.id === 'bma-waterflow-หกวา-นิมิตใหม่' ||
-    station.id === 'bma-waterflow-nimitmai' ||
-    (station.name && station.name.includes('นิมิตใหม่')) ||
-    (station.name && station.name.includes('WL.KHW.01'))
-  ) {
-    return true;
+  return false;
+}
+
+/**
+ * Helper to check if a station has exceeded bank level (Tier 3: Emergency)
+ */
+function isStationOverflow(s) {
+  if (!s) return false;
+  if (s.isOverflow === true || s.tier === 'EMERGENCY') return true;
+  if (s.status === 'danger' || s.statusSeverity === 'danger') return true;
+  if (s.statusText && s.statusText.includes('ล้นตลิ่ง')) return true;
+
+  if (s.isGate) {
+    if (s.inside && s.inside.isOverflow) return true;
+    if (s.outside && s.outside.isOverflow) return true;
+    const inLvl = s.inside?.level !== null && s.inside?.level !== undefined ? parseFloat(s.inside.level) : null;
+    const inBank = s.inside?.bank !== null && s.inside?.bank !== undefined ? parseFloat(s.inside.bank) : null;
+    if (inLvl !== null && inBank !== null && !isNaN(inLvl) && !isNaN(inBank) && inLvl >= inBank) return true;
+    const outLvl = s.outside?.level !== null && s.outside?.level !== undefined ? parseFloat(s.outside.level) : null;
+    const outBank = s.outside?.bank !== null && s.outside?.bank !== undefined ? parseFloat(s.outside.bank) : null;
+    if (outLvl !== null && outBank !== null && !isNaN(outLvl) && !isNaN(outBank) && outLvl >= outBank) return true;
+  }
+
+  const rawLvl = s.waterLevel ?? s.level ?? s.inside?.level ?? null;
+  const rawBank = s.bankLevel ?? s.inside?.bank ?? null;
+  if (rawLvl !== null && rawBank !== null) {
+    const lvlNum = parseFloat(rawLvl);
+    const bankNum = parseFloat(rawBank);
+    if (!isNaN(lvlNum) && !isNaN(bankNum) && lvlNum >= bankNum) {
+      return true;
+    }
   }
 
   return false;
@@ -1433,6 +1474,12 @@ function getTargetAlertReason(station) {
   const isNearest = appState.nearestStation && station.id === appState.nearestStation.id;
   if (isNearest) {
     reasons.push(station.distanceText ? `📍 ใกล้คุณที่สุด (${station.distanceText})` : '📍 ใกล้คุณที่สุด');
+  } else if (station.distanceKm !== null && station.distanceKm !== undefined) {
+    if (station.distanceKm <= 5.0) {
+      reasons.push(`📍 ในรัศมี ${formatDistance(station.distanceKm)}`);
+    } else {
+      reasons.push(`นอกรัศมี 5 กม. (${formatDistance(station.distanceKm)})`);
+    }
   }
 
   if (
@@ -1443,10 +1490,8 @@ function getTargetAlertReason(station) {
     (station.name && station.name.includes('คลองหกวา ลำลูกกา คลอง 8')) ||
     (station.name && station.name.includes('คลอง 8'))
   ) {
-    reasons.push('🌊 ปตร.คลอง 8 (จุดเฝ้าระวังหลัก)');
-  }
-
-  if (
+    reasons.push('🌊 ปตร.คลอง 8');
+  } else if (
     station.stCode === 'ST-3' ||
     station.id === 'bma_wf_khw01' ||
     station.id === 'bma-waterflow-หกวา-นิมิตใหม่' ||
@@ -1454,56 +1499,105 @@ function getTargetAlertReason(station) {
     (station.name && station.name.includes('นิมิตใหม่')) ||
     (station.name && station.name.includes('WL.KHW.01'))
   ) {
-    reasons.push('💧 สูบน้ำนิมิตใหม่ (จุดเฝ้าระวังหลัก)');
+    reasons.push('💧 สูบน้ำนิมิตใหม่');
+  } else if (station.canalGroupName || station.canal) {
+    reasons.push(station.canalGroupName || station.canal);
   }
 
-  return reasons.join(' • ') || 'จุดเฝ้าระวังเป้าหมาย';
+  return reasons.join(' • ') || 'สถานีตรวจวัดน้ำ';
 }
 
 /**
- * REFACTORED ALERT BANNERS (VISUAL ALERTS ONLY):
- * Filters strictly to 3 target stations (Nearest + Khlong 8 + Nimit Mai).
- * Controls top Emergency / Warning banner display (Visual alerts only, no audio).
+ * REFACTORED ALERT BANNERS:
+ * Filters ALL stations in the system (not just hardcoded 3 targets).
+ * Separates into 2 groups:
+ * 1. Nearby Critical (distance <= 5.0 km)
+ * 2. Total Critical (system-wide)
+ * Renders all nearby critical cards in 1-col mobile / 2-col PC grid.
+ * Provides expandable toggle for outside 5km critical stations.
  */
 function handleTwoTierAlerts() {
   const normalBanner = document.getElementById('normalBanner');
   const emergencyBanner = document.getElementById('emergencyBanner');
   const emergencyStationCards = document.getElementById('emergencyStationCards');
+  const emergencyOutsideSection = document.getElementById('emergencyOutsideSection');
   const emergencySummaryHeadline = document.getElementById('emergencySummaryHeadline');
 
   const warningBanner = document.getElementById('warningBanner');
   const warningStationCards = document.getElementById('warningStationCards');
+  const warningOutsideSection = document.getElementById('warningOutsideSection');
   const warningSummaryHeadline = document.getElementById('warningSummaryHeadline');
 
-  // Filter ONLY stations that match the 3 targets
-  const targetOverflowStations = appState.stations.filter(s => s.isOverflow && isTargetAlertStation(s));
-  const targetWarningStations = appState.stations.filter(s => s.isWarning && !s.isOverflow && isTargetAlertStation(s));
+  // Filter ALL overflow (Tier 3: Emergency) stations in the system
+  const overflowAll = appState.stations.filter(s => isStationOverflow(s));
+  const nearbyOverflow = overflowAll
+    .filter(s => s.distanceKm !== null && s.distanceKm !== undefined && s.distanceKm <= 5.0)
+    .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
+  const outsideOverflow = overflowAll
+    .filter(s => s.distanceKm === null || s.distanceKm === undefined || s.distanceKm > 5.0)
+    .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
 
-  if (targetOverflowStations.length > 0) {
+  // Filter ALL critical (Tier 2: Warning) stations in the system
+  // (s.isCritical || s.isOverflow || s.status === 'warning' || s.status === 'danger' || waterLevel >= criticalLevel)
+  const criticalAll = appState.stations.filter(s => isStationCritical(s) && !isStationOverflow(s));
+  const nearbyCritical = criticalAll
+    .filter(s => s.distanceKm !== null && s.distanceKm !== undefined && s.distanceKm <= 5.0)
+    .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
+  const outsideCritical = criticalAll
+    .filter(s => s.distanceKm === null || s.distanceKm === undefined || s.distanceKm > 5.0)
+    .sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
+
+  if (overflowAll.length > 0) {
     // ----------------------------------------------------
-    // TIER 3: EMERGENCY (🔴 น้ำล้นตลิ่งที่จุดเป้าหมาย - Visual Alert)
+    // TIER 3: EMERGENCY (🔴 ตรวจพบสถานีน้ำล้นตลิ่ง)
     // ----------------------------------------------------
     if (normalBanner) normalBanner.classList.add('hidden');
+    if (warningBanner) warningBanner.classList.add('hidden');
     if (emergencyBanner) {
       emergencyBanner.classList.remove('hidden');
+
       if (emergencySummaryHeadline) {
-        emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${targetOverflowStations.length} สถานีเป้าหมายน้ำล้นตลิ่งแล้ว!`;
+        if (nearbyOverflow.length > 0) {
+          emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${nearbyOverflow.length} สถานีใกล้ตัวคุณ (และ ${overflowAll.length} สถานีในพื้นที่) น้ำล้นตลิ่งแล้ว!`;
+        } else {
+          emergencySummaryHeadline.textContent = `🚨 ฉุกเฉิน: ตรวจพบ ${overflowAll.length} สถานีในพื้นที่น้ำล้นตลิ่งแล้ว! (อยู่นอกรัศมี 5 กม. ของคุณ)`;
+        }
       }
+
       if (emergencyStationCards) {
-        emergencyStationCards.innerHTML = renderAlertStationCards(targetOverflowStations, 'EMERGENCY');
+        const primaryCards = nearbyOverflow.length > 0 ? nearbyOverflow : outsideOverflow;
+        emergencyStationCards.innerHTML = renderAlertStationCards(primaryCards, 'EMERGENCY');
+      }
+
+      if (emergencyOutsideSection) {
+        if (nearbyOverflow.length > 0 && outsideOverflow.length > 0) {
+          const outsideCodes = outsideOverflow.map(s => s.stCode || s.name).join(', ');
+          emergencyOutsideSection.innerHTML = `
+            <div class="pt-3 border-t border-red-300/20">
+              <button type="button" onclick="toggleOutsideAlertCards('emergency')" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-red-950/70 hover:bg-red-900/80 border border-red-400/40 text-red-200 text-xs font-bold flex items-center justify-between sm:justify-start gap-2 transition active:scale-98 cursor-pointer touch-manipulation">
+                <div class="flex items-center gap-1.5">
+                  <i data-lucide="eye" class="w-4 h-4 text-red-300"></i>
+                  <span>ดูสถานีน้ำล้นตลิ่งนอกรัศมี 5 กม. เพิ่มเติม (${outsideOverflow.length} จุด: ${outsideCodes})</span>
+                </div>
+                <i id="outsideEmergencyChevron" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
+              </button>
+              <div id="outsideEmergencyCards" class="hidden mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${renderAlertStationCards(outsideOverflow, 'EMERGENCY')}
+              </div>
+            </div>
+          `;
+        } else {
+          emergencyOutsideSection.innerHTML = '';
+        }
       }
     }
-    if (warningBanner) warningBanner.classList.add('hidden');
 
-    // Visual indicators only
     document.body.classList.add('emergency-active');
-
-    // Auto-expand emergency guidelines
     updateGuidelinesAutoExpand(true, false);
 
-  } else if (targetWarningStations.length > 0) {
+  } else if (criticalAll.length > 0) {
     // ----------------------------------------------------
-    // TIER 2: WARNING (🟡/🟠 เตือนภัยวิกฤติที่จุดเป้าหมาย - Visual Alert)
+    // TIER 2: WARNING (🟡/🟠 ตรวจพบสถานีเข้าสู่เกณฑ์วิกฤติ)
     // ----------------------------------------------------
     document.body.classList.remove('emergency-active');
     if (normalBanner) normalBanner.classList.add('hidden');
@@ -1511,15 +1605,43 @@ function handleTwoTierAlerts() {
 
     if (warningBanner) {
       warningBanner.classList.remove('hidden');
+
       if (warningSummaryHeadline) {
-        warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${targetWarningStations.length} สถานีเป้าหมายเข้าสู่เกณฑ์วิกฤติ (เตรียมความพร้อม)`;
+        if (nearbyCritical.length > 0) {
+          warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${nearbyCritical.length} สถานีใกล้ตัวคุณ (และ ${criticalAll.length} สถานีในพื้นที่) เข้าสู่เกณฑ์วิกฤติ`;
+        } else {
+          warningSummaryHeadline.textContent = `⚠️ เตือนภัย: ตรวจพบ ${criticalAll.length} สถานีในพื้นที่เข้าสู่เกณฑ์วิกฤติ (อยู่นอกรัศมี 5 กม. ของคุณ)`;
+        }
       }
+
       if (warningStationCards) {
-        warningStationCards.innerHTML = renderAlertStationCards(targetWarningStations, 'WARNING');
+        const primaryCards = nearbyCritical.length > 0 ? nearbyCritical : outsideCritical;
+        warningStationCards.innerHTML = renderAlertStationCards(primaryCards, 'WARNING');
+      }
+
+      if (warningOutsideSection) {
+        if (nearbyCritical.length > 0 && outsideCritical.length > 0) {
+          const outsideCodes = outsideCritical.map(s => s.stCode || s.name).join(', ');
+          warningOutsideSection.innerHTML = `
+            <div class="pt-3 border-t border-amber-300/20">
+              <button type="button" onclick="toggleOutsideAlertCards('warning')" class="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-amber-950/70 hover:bg-amber-900/80 border border-amber-400/40 text-amber-200 text-xs font-bold flex items-center justify-between sm:justify-start gap-2 transition active:scale-98 cursor-pointer touch-manipulation">
+                <div class="flex items-center gap-1.5">
+                  <i data-lucide="eye" class="w-4 h-4 text-amber-300"></i>
+                  <span>ดูสถานีวิกฤตินอกรัศมี 5 กม. เพิ่มเติม (${outsideCritical.length} จุด: ${outsideCodes})</span>
+                </div>
+                <i id="outsideWarningChevron" data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200"></i>
+              </button>
+              <div id="outsideWarningCards" class="hidden mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${renderAlertStationCards(outsideCritical, 'WARNING')}
+              </div>
+            </div>
+          `;
+        } else {
+          warningOutsideSection.innerHTML = '';
+        }
       }
     }
 
-    // Auto-expand warning guidelines
     updateGuidelinesAutoExpand(false, true);
 
   } else {
@@ -1531,12 +1653,29 @@ function handleTwoTierAlerts() {
     if (warningBanner) warningBanner.classList.add('hidden');
     if (normalBanner) normalBanner.classList.remove('hidden');
 
-    // Normal guidelines state (collapsed by default)
     updateGuidelinesAutoExpand(false, false);
   }
 
   if (window.lucide) window.lucide.createIcons();
 }
+
+function toggleOutsideAlertCards(tier) {
+  const isEmerg = tier === 'emergency';
+  const container = document.getElementById(isEmerg ? 'outsideEmergencyCards' : 'outsideWarningCards');
+  const chevron = document.getElementById(isEmerg ? 'outsideEmergencyChevron' : 'outsideWarningChevron');
+  if (!container) return;
+
+  const isHidden = container.classList.contains('hidden');
+  if (isHidden) {
+    container.classList.remove('hidden');
+    if (chevron) chevron.classList.add('rotate-180');
+  } else {
+    container.classList.add('hidden');
+    if (chevron) chevron.classList.remove('rotate-180');
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+window.toggleOutsideAlertCards = toggleOutsideAlertCards;
 
 /**
  * ================= FLOOD EMERGENCY GUIDELINES INTERACTION =================
@@ -1682,8 +1821,10 @@ function renderAlertStationCards(stations, tier) {
               </div>
             </div>
 
-            <h4 class="text-xs sm:text-sm font-bold text-white leading-tight">
-              ${s.stCode ? `<span class="text-amber-300 mr-1 font-mono font-bold">${s.stCode}</span>` : ''}${s.name}
+            <h4 class="text-xs sm:text-sm font-bold text-white leading-tight flex items-center gap-1.5 flex-wrap">
+              ${s.stCode ? `<span class="text-amber-300 font-mono font-bold">${s.stCode}</span>` : ''}
+              ${getCanalBadgeHtml(s)}
+              <span>${s.name}</span>
             </h4>
 
             <!-- Dual Side Water Levels in Alert Banner -->
@@ -1771,8 +1912,10 @@ function renderAlertStationCards(stations, tier) {
           </div>
 
           <!-- Station Name -->
-          <h4 class="text-xs sm:text-sm font-bold text-white leading-tight">
-            ${s.stCode ? `<span class="text-amber-300 mr-1 font-mono font-bold">${s.stCode}</span>` : ''}${s.name}
+          <h4 class="text-xs sm:text-sm font-bold text-white leading-tight flex items-center gap-1.5 flex-wrap">
+            ${s.stCode ? `<span class="text-amber-300 font-mono font-bold">${s.stCode}</span>` : ''}
+            ${getCanalBadgeHtml(s)}
+            <span>${s.name}</span>
           </h4>
 
           <!-- Big Water Level -->
