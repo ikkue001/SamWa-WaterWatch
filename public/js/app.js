@@ -188,6 +188,12 @@ let mapProximityCircle = null;
 let mapJunctionPolylines = [];
 const popupHistoryCache = new Map();
 
+// Centralized Popup Chart & History Instance Lifecycle
+window.activePopupCharts = window.activePopupCharts || {};
+window.cachedStationHistory = window.cachedStationHistory || {};
+window.currentOpenPopupStationId = null;
+window.mainTrendChart = null;
+
 // Haversine Formula for distance calculation in kilometers
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth's radius in km
@@ -602,6 +608,14 @@ function applyDataUpdate(data) {
   handleTwoTierAlerts();
   updateHeaderStatus();
   resetCountdown(120);
+
+  // 2. วาดกราฟซ้ำอัตโนมัติเมื่อข้อมูลอัปเดต (Auto Re-render Open Popup)
+  if (window.currentOpenPopupStationId) {
+    const openSt = appState.stations.find(s => s.id === window.currentOpenPopupStationId || s.stCode === window.currentOpenPopupStationId);
+    if (openSt) {
+      setTimeout(() => renderStationPopupSparkline(openSt), 60);
+    }
+  }
 }
 
 /**
@@ -950,6 +964,13 @@ function setupEventListeners() {
         if (waterChartInstance) {
           initWaterHistoryChart();
         }
+        // Auto Re-render Open Popup on Refresh
+        if (window.currentOpenPopupStationId) {
+          const openSt = appState.stations.find(s => s.id === window.currentOpenPopupStationId || s.stCode === window.currentOpenPopupStationId);
+          if (openSt) {
+            renderStationPopupSparkline(openSt);
+          }
+        }
       } catch (err) {
         console.error('Refresh error:', err);
       } finally {
@@ -960,6 +981,29 @@ function setupEventListeners() {
       }
     });
   }
+
+  // 3. รองรับการสลับแท็บด้วย VisibilityChange (Handle Tab Switching)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      // 1. สั่งกราฟหลักให้ปรับขนาดใหม่
+      if (window.mainTrendChart) {
+        window.mainTrendChart.resize();
+      }
+      // 2. สั่งวาดมินิกราฟใน Popup ที่เปิดค้างอยู่ใหม่ทันที
+      if (window.currentOpenPopupStationId && window.cachedStationHistory) {
+        const stationId = window.currentOpenPopupStationId;
+        const historyData = window.cachedStationHistory[stationId];
+        if (historyData) {
+          setTimeout(() => renderPopupChart(stationId, historyData), 100);
+        } else {
+          const openSt = appState.stations.find(s => s.id === stationId || s.stCode === stationId);
+          if (openSt) {
+            setTimeout(() => renderStationPopupSparkline(openSt), 100);
+          }
+        }
+      }
+    }
+  });
 
   // GPS Refresh
   if (btnGpsRefresh) {
@@ -1334,7 +1378,7 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   const series = Array.isArray(values) ? { outside: values } : values;
   const insideValues = series.inside || [];
   const outsideValues = series.outside || [];
-  if (!canvas || outsideValues.length < 2) return;
+  if (!canvas || (outsideValues.length < 2 && insideValues.length < 2)) return;
 
   const width = Math.max(canvas.clientWidth || 250, 180);
   const height = 55;
@@ -1354,7 +1398,8 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   const min = rawMin - 0.15;
   const max = rawMax + 0.15;
   const range = Math.max(max - min, 0.02);
-  const xStep = (width - padding.left - padding.right) / (outsideValues.length - 1);
+  const effectiveLen = Math.max(outsideValues.length, insideValues.length, 2);
+  const xStep = (width - padding.left - padding.right) / (effectiveLen - 1);
   const y = value => padding.top + (1 - ((value - min) / range)) * (height - padding.top - padding.bottom);
 
   const thresholdLines = station.isGate && station.thresholds
@@ -1402,24 +1447,211 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   drawLine(outsideValues, 'rgba(192, 132, 252, 0.9)');
 }
 
-async function renderStationPopupSparkline(station) {
-  const fallbackValues = getPopupHistoryValues(station);
-  drawStationPopupSparkline(station, fallbackValues);
-  const trendElement = document.getElementById(`popup-trend-${station.id}`);
-  const applyTrend = values => {
-    const trend = getUnifiedWaterTrend(Array.isArray(values) ? values : (values.inside || values.outside));
-    if (trendElement) {
-      trendElement.className = `${trend.color} font-semibold`;
-      trendElement.textContent = `${trend.icon} ${trend.text}`;
+/**
+ * 1. จัดการ Chart Instance Lifecycle (ป้องกัน Canvas Crash)
+ * วาดกราฟ Popup ด้วย Chart.js พร้อมระบบทำลาย Instance เดิมและป้องกัน Canvas ชนกัน
+ */
+async function renderPopupChart(stationId, data) {
+  if (!stationId) return;
+
+  // Make sure Chart.js is loaded
+  if (typeof Chart === 'undefined') {
+    if (typeof loadChartJs === 'function') {
+      try {
+        await loadChartJs();
+      } catch (err) {
+        console.warn('[Popup Chart] Chart.js unavailable, falling back to 2D sparkline:', err);
+        const station = (appState.stations || []).find(s => s.id === stationId || s.stCode === stationId);
+        if (station) drawStationPopupSparkline(station, data);
+        return;
+      }
+    } else {
+      const station = (appState.stations || []).find(s => s.id === stationId || s.stCode === stationId);
+      if (station) drawStationPopupSparkline(station, data);
+      return;
     }
-  };
-  applyTrend(fallbackValues);
+  }
+
+  // ตรวจสอบและทำลายกราฟเดิมทิ้งก่อนเสมอ
+  if (window.activePopupCharts && window.activePopupCharts[stationId]) {
+    try {
+      window.activePopupCharts[stationId].destroy();
+    } catch (e) {
+      console.warn('[Popup Chart] Error destroying old chart instance:', e);
+    }
+    delete window.activePopupCharts[stationId];
+  }
+
+  // ตรวจสอบว่า Canvas ยังอยู่ใน DOM และมีขนาดถูกต้อง
+  const canvas = document.getElementById(`popup-chart-${stationId}`);
+  if (!canvas) return;
+
+  // ป้องกัน Chart instance ตกค้างใน DOM canvas
+  if (typeof Chart.getChart === 'function') {
+    const existingChart = Chart.getChart(canvas);
+    if (existingChart) {
+      try { existingChart.destroy(); } catch (e) {}
+    }
+  }
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const station = (appState.stations || []).find(s => s.id === stationId || s.stCode === stationId) || {};
+
+  // แยกชุดข้อมูล series
+  let insideValues = [];
+  let outsideValues = [];
+
+  if (Array.isArray(data)) {
+    outsideValues = data.map(Number).filter(Number.isFinite);
+  } else if (data && typeof data === 'object') {
+    if (Array.isArray(data.inside)) insideValues = data.inside.map(Number).filter(Number.isFinite);
+    else if (Array.isArray(data.waterLevelsIn)) insideValues = data.waterLevelsIn.map(Number).filter(Number.isFinite);
+
+    if (Array.isArray(data.outside)) outsideValues = data.outside.map(Number).filter(Number.isFinite);
+    else if (Array.isArray(data.waterLevelsOut)) outsideValues = data.waterLevelsOut.map(Number).filter(Number.isFinite);
+    else if (Array.isArray(data.waterLevels)) outsideValues = data.waterLevels.map(Number).filter(Number.isFinite);
+    else if (Array.isArray(data.history)) outsideValues = data.history.map(Number).filter(Number.isFinite);
+  }
+
+  if (outsideValues.length < 2 && insideValues.length < 2 && station.id) {
+    const fallback = getPopupHistorySeries(station);
+    insideValues = fallback.inside || [];
+    outsideValues = fallback.outside || [];
+  }
+
+  // บันทึกลง cache เสมอเพื่อให้ tab switching หรือ refresh นำไปใช้ได้ทันที
+  const normalizedData = { inside: insideValues, outside: outsideValues };
+  window.cachedStationHistory[stationId] = normalizedData;
+  if (station.id) window.cachedStationHistory[station.id] = normalizedData;
+  if (station.stCode) window.cachedStationHistory[station.stCode] = normalizedData;
+
+  // อัปเดตข้อความแนวโน้มบนหัวกล่องกราฟ
+  const trendElement = document.getElementById(`popup-trend-${stationId}`);
+  if (trendElement) {
+    const trendValues = outsideValues.length > 0 ? outsideValues : insideValues;
+    const trend = getUnifiedWaterTrend(trendValues);
+    trendElement.className = `${trend.color} font-semibold`;
+    trendElement.textContent = `${trend.icon} ${trend.text}`;
+  }
+
+  const pointCount = Math.max(outsideValues.length, insideValues.length, 12);
+  const labels = Array.from({ length: pointCount }, (_, i) => `${i + 1}`);
+
+  const datasets = [];
+
+  // เส้นระดับน้ำฝั่งใน (กรณีสถานีประตูระบายน้ำ)
+  if (insideValues.length > 0) {
+    datasets.push({
+      label: 'ด้านใน',
+      data: insideValues,
+      borderColor: 'rgba(56, 189, 248, 1)',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.3,
+      fill: false
+    });
+  }
+
+  // เส้นระดับน้ำฝั่งนอก หรือ ระดับน้ำคลองเดี่ยว
+  if (outsideValues.length > 0) {
+    const lineColor = insideValues.length > 0 ? 'rgba(192, 132, 252, 0.95)' : 'rgba(56, 189, 248, 1)';
+    datasets.push({
+      label: insideValues.length > 0 ? 'ด้านนอก' : 'ระดับน้ำ',
+      data: outsideValues,
+      borderColor: lineColor,
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.3,
+      fill: false
+    });
+  }
+
+  // เส้นประเกณฑ์วิกฤติ (Critical Threshold Line)
+  const critVal = Number(station.criticalLevel || station.thresholds?.out?.critical);
+  if (Number.isFinite(critVal)) {
+    datasets.push({
+      label: 'เกณฑ์วิกฤติ',
+      data: new Array(labels.length).fill(critVal),
+      borderColor: 'rgba(251, 191, 36, 0.85)',
+      borderWidth: 1,
+      borderDash: [3, 3],
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      fill: false
+    });
+  }
+
+  try {
+    window.activePopupCharts[stationId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false, // ปิด animation ตอน re-draw เพื่อความเร็วและเสถียร
+        layout: {
+          padding: { top: 4, bottom: 4, left: 2, right: 2 }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            mode: 'index',
+            intersect: false,
+            callbacks: {
+              label: (item) => ` ${item.dataset.label}: ${Number(item.raw).toFixed(2)} ม.`
+            }
+          }
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            display: false,
+            grace: '10%'
+          }
+        },
+        interaction: {
+          mode: 'nearest',
+          axis: 'x',
+          intersect: false
+        }
+      }
+    });
+  } catch (err) {
+    console.error(`[Popup Chart] Failed to render Chart.js for ${stationId}:`, err);
+    drawStationPopupSparkline(station, normalizedData);
+  }
+}
+window.renderPopupChart = renderPopupChart;
+
+async function renderStationPopupSparkline(station) {
+  if (!station || !station.id) return;
+
+  // บันทึกสถานีที่กำลังเปิด Popup
+  window.currentOpenPopupStationId = station.id;
+
+  const fallbackValues = getPopupHistorySeries(station);
+  window.cachedStationHistory[station.id] = fallbackValues;
+
+  // Immediate render with cached data if present
   if (popupHistoryCache.has(station.id)) {
-    const values = popupHistoryCache.get(station.id);
-    drawStationPopupSparkline(station, values);
-    applyTrend(values);
+    const cached = popupHistoryCache.get(station.id);
+    window.cachedStationHistory[station.id] = cached;
+    renderPopupChart(station.id, cached);
     return;
   }
+
+  // วาดข้อมูลสำรองก่อนทันที ป้องกันกล่องมืดว่างเปล่า
+  renderPopupChart(station.id, fallbackValues);
 
   try {
     const response = await fetch(`/api/water-history?station=${encodeURIComponent(station.id)}`, { cache: 'no-store' });
@@ -1431,10 +1663,13 @@ async function renderStationPopupSparkline(station) {
       outside: (selected.waterLevelsOut || selected.waterLevels || [])
         .map(Number).filter(Number.isFinite).slice(-24)
     };
-    if (values.outside.length > 1) {
+    if (values.outside.length > 1 || values.inside.length > 1) {
       popupHistoryCache.set(station.id, values);
-      drawStationPopupSparkline(station, values);
-      applyTrend(values);
+      window.cachedStationHistory[station.id] = values;
+      // วาดซ้ำเฉพาะกรณีที่ Popup ของสถานีนี้ยังเปิดอยู่
+      if (window.currentOpenPopupStationId === station.id) {
+        renderPopupChart(station.id, values);
+      }
     }
   } catch (err) {
     console.warn('[Popup Sparkline] History unavailable:', err);
@@ -1672,7 +1907,9 @@ function updateMapMarkers() {
           </div>
           <div>
             <b id="popup-trend-${station.id}" class="${popupTrend.color} font-semibold">${popupTrend.icon} ${popupTrend.text}</b>
-            <canvas id="${popupChartId}" height="55" class="w-full mt-1"></canvas>
+            <div style="height: 55px; min-height: 55px; position: relative;" class="w-full mt-1">
+              <canvas id="${popupChartId}"></canvas>
+            </div>
             ${station.isGate ? `
               <div class="flex items-center justify-center gap-2 text-[9px] text-slate-300 mt-1">
                 <span class="text-sky-300">━ ใน: ${station.inside?.level != null ? station.inside.level.toFixed(2) : '--'} ม.</span>
@@ -1706,8 +1943,19 @@ function updateMapMarkers() {
       mapStationMarkers[station.id].setIcon(customIcon);
       mapStationMarkers[station.id].setPopupContent(popupHtml);
       mapStationMarkers[station.id].off('popupopen');
+      mapStationMarkers[station.id].off('popupclose');
       mapStationMarkers[station.id].on('popupopen', () => {
+        window.currentOpenPopupStationId = station.id;
         renderStationPopupSparkline(station);
+      });
+      mapStationMarkers[station.id].on('popupclose', () => {
+        if (window.currentOpenPopupStationId === station.id) {
+          window.currentOpenPopupStationId = null;
+        }
+        if (window.activePopupCharts && window.activePopupCharts[station.id]) {
+          try { window.activePopupCharts[station.id].destroy(); } catch (e) {}
+          delete window.activePopupCharts[station.id];
+        }
       });
       if (mapStationMarkers[station.id].getTooltip()) {
         mapStationMarkers[station.id].setTooltipContent(tooltipText);
@@ -1717,7 +1965,17 @@ function updateMapMarkers() {
       marker.bindPopup(popupHtml, popupOptions);
       marker.bindTooltip(tooltipText, { direction: 'top', offset: [0, -14], opacity: 0.95 });
       marker.on('popupopen', () => {
+        window.currentOpenPopupStationId = station.id;
         renderStationPopupSparkline(station);
+      });
+      marker.on('popupclose', () => {
+        if (window.currentOpenPopupStationId === station.id) {
+          window.currentOpenPopupStationId = null;
+        }
+        if (window.activePopupCharts && window.activePopupCharts[station.id]) {
+          try { window.activePopupCharts[station.id].destroy(); } catch (e) {}
+          delete window.activePopupCharts[station.id];
+        }
       });
 
       // Stop marker click event from propagating to the map
@@ -1730,6 +1988,14 @@ function updateMapMarkers() {
       mapStationMarkers[station.id] = marker;
     }
   });
+
+  // Auto Re-render chart if a popup is currently open
+  if (window.currentOpenPopupStationId) {
+    const openStation = appState.stations.find(s => s.id === window.currentOpenPopupStationId || s.stCode === window.currentOpenPopupStationId);
+    if (openStation) {
+      setTimeout(() => renderStationPopupSparkline(openStation), 50);
+    }
+  }
 
   // 3. Highlight dual-canal boundary connections on map (Visual Boundary Connection)
   if (mapJunctionPolylines && mapJunctionPolylines.length > 0) {
@@ -4278,11 +4544,15 @@ async function initWaterHistoryChart() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     historicalDataCache = data.stations || {};
+    window.cachedStationHistory = Object.assign(window.cachedStationHistory || {}, historicalDataCache);
     const targetData = data.selectedStation || (data.waterLevels ? data : null);
     if (targetData) {
       historicalDataCache[currentChartStationId] = targetData;
       if (targetData.id) historicalDataCache[targetData.id] = targetData;
       if (targetData.stCode) historicalDataCache[targetData.stCode] = targetData;
+      window.cachedStationHistory[currentChartStationId] = targetData;
+      if (targetData.id) window.cachedStationHistory[targetData.id] = targetData;
+      if (targetData.stCode) window.cachedStationHistory[targetData.stCode] = targetData;
     }
 
     renderStationSelectorButtons();
@@ -4290,6 +4560,7 @@ async function initWaterHistoryChart() {
   } catch (err) {
     console.warn('[Water History Error] Using fallback telemetry history:', err);
     historicalDataCache = generateClientSideHistoryFallback();
+    window.cachedStationHistory = Object.assign(window.cachedStationHistory || {}, historicalDataCache);
     renderStationSelectorButtons();
     initChart(currentChartStationId);
   } finally {
@@ -4398,6 +4669,9 @@ async function selectStationChart(stationId) {
       historicalDataCache[stationId] = targetData;
       if (targetData.id) historicalDataCache[targetData.id] = targetData;
       if (targetData.stCode) historicalDataCache[targetData.stCode] = targetData;
+      window.cachedStationHistory[stationId] = targetData;
+      if (targetData.id) window.cachedStationHistory[targetData.id] = targetData;
+      if (targetData.stCode) window.cachedStationHistory[targetData.stCode] = targetData;
       initChart(stationId, targetData);
     } else {
       initChart(stationId);
@@ -4662,6 +4936,8 @@ function renderWaterHistoryChart(stationId, liveData) {
 
   if (waterChartInstance) {
     waterChartInstance.destroy();
+    waterChartInstance = null;
+    window.mainTrendChart = null;
   }
 
   waterChartInstance = new Chart(ctx, {
@@ -4801,6 +5077,8 @@ function renderWaterHistoryChart(stationId, liveData) {
       }
     }
   });
+
+  window.mainTrendChart = waterChartInstance;
 
   if (window.lucide) {
     window.lucide.createIcons();
