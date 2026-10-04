@@ -1218,6 +1218,19 @@ function getPopupHistoryValues(station) {
   return Array.from({ length: 12 }, (_, index) => current - direction * (11 - index) * 0.01);
 }
 
+function getPopupTrendLabel(values) {
+  if (!Array.isArray(values) || values.length < 2) return 'ทรงตัว';
+  const latest = Number(values[values.length - 1]);
+  const recent = values.slice(Math.max(0, values.length - 4), -1)
+    .map(Number)
+    .filter(Number.isFinite);
+  if (!Number.isFinite(latest) || recent.length === 0) return 'ทรงตัว';
+  const average = recent.reduce((sum, value) => sum + value, 0) / recent.length;
+  if (latest - average <= -0.03) return 'ลดลง';
+  if (latest - average >= 0.03) return 'เพิ่มขึ้น';
+  return 'ทรงตัว';
+}
+
 function drawStationPopupSparkline(station, values = getPopupHistoryValues(station)) {
   const canvas = document.getElementById(`popup-chart-${station.id}`);
   if (!canvas || !values || values.length < 2) return;
@@ -1234,8 +1247,10 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   ctx.clearRect(0, 0, width, height);
 
   const padding = { top: 5, right: 3, bottom: 5, left: 3 };
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const min = rawMin - 0.15;
+  const max = rawMax + 0.15;
   const range = Math.max(max - min, 0.02);
   const xStep = (width - padding.left - padding.right) / (values.length - 1);
   const y = value => padding.top + (1 - ((value - min) / range)) * (height - padding.top - padding.bottom);
@@ -1257,18 +1272,32 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.beginPath();
-  values.forEach((value, index) => {
-    const x = padding.left + index * xStep;
-    if (index === 0) ctx.moveTo(x, y(value));
-    else ctx.lineTo(x, y(value));
-  });
+  const points = values.map((value, index) => ({
+    x: padding.left + index * xStep,
+    y: y(value)
+  }));
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let index = 1; index < points.length - 1; index++) {
+    const midpointX = (points[index].x + points[index + 1].x) / 2;
+    const midpointY = (points[index].y + points[index + 1].y) / 2;
+    ctx.quadraticCurveTo(points[index].x, points[index].y, midpointX, midpointY);
+  }
+  const lastPoint = points[points.length - 1];
+  const previousPoint = points[points.length - 2];
+  ctx.quadraticCurveTo(previousPoint.x, previousPoint.y, lastPoint.x, lastPoint.y);
   ctx.stroke();
 }
 
 async function renderStationPopupSparkline(station) {
-  drawStationPopupSparkline(station);
+  const fallbackValues = getPopupHistoryValues(station);
+  drawStationPopupSparkline(station, fallbackValues);
+  const trendLabel = getPopupTrendLabel(fallbackValues);
+  const trendElement = document.querySelector(`#popup-chart-${station.id}`)?.previousElementSibling?.querySelector('b');
+  if (trendElement) trendElement.textContent = trendLabel;
   if (popupHistoryCache.has(station.id)) {
-    drawStationPopupSparkline(station, popupHistoryCache.get(station.id));
+    const values = popupHistoryCache.get(station.id);
+    drawStationPopupSparkline(station, values);
+    if (trendElement) trendElement.textContent = getPopupTrendLabel(values);
     return;
   }
 
@@ -1283,6 +1312,7 @@ async function renderStationPopupSparkline(station) {
     if (values.length > 1) {
       popupHistoryCache.set(station.id, values);
       drawStationPopupSparkline(station, values);
+      if (trendElement) trendElement.textContent = getPopupTrendLabel(values);
     }
   } catch (err) {
     console.warn('[Popup Sparkline] History unavailable:', err);
@@ -1874,10 +1904,10 @@ function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations
     // 🔴 TIER 3: EMERGENCY (เตือนภัยระดับสูง)
     card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-2xl relative overflow-hidden bg-gradient-to-r from-red-950/90 via-slate-900/90 to-slate-900/95 border-red-500/60 shadow-red-500/20 emergency-border-pulse';
     if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-red-500/20 rounded-full blur-3xl pointer-events-none animate-pulse';
-    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-red-500/30 border border-red-400/60 text-red-200 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/30 text-2xl select-none animate-pulse';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/20 text-2xl select-none animate-pulse';
     if (icon) {
       icon.setAttribute('data-lucide', 'alert-octagon');
-      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-red-300';
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-rose-400';
     }
     if (badge) {
       badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-red-500/30 text-red-200 border border-red-400/60 font-mono shadow-sm animate-pulse';
@@ -1914,10 +1944,10 @@ function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations
     // 🟡/🟠 TIER 2: WARNING (เฝ้าระวัง)
     card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-amber-950/80 via-slate-900/90 to-slate-900/95 border-amber-500/50 shadow-amber-500/10';
     if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-amber-500/15 rounded-full blur-3xl pointer-events-none';
-    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-amber-500/20 border border-amber-400/50 text-amber-300 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 text-2xl select-none';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 text-2xl select-none';
     if (icon) {
       icon.setAttribute('data-lucide', 'alert-triangle');
-      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-amber-300';
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-amber-400';
     }
     if (badge) {
       badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 border border-amber-400/50 font-mono shadow-sm';
@@ -1952,7 +1982,7 @@ function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations
     // 🟢 TIER 1: NORMAL (ปกติ)
     card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-slate-900/95 border-emerald-500/40';
     if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none';
-    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/15 text-2xl select-none';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/15 text-2xl select-none';
     if (icon) {
       icon.setAttribute('data-lucide', 'shield-check');
       icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-emerald-400';
@@ -3543,8 +3573,14 @@ async function loadAiAnalysis(forceRefresh = false) {
 
   if (btnRefresh) {
     btnRefresh.disabled = true;
+    btnRefresh.classList.add('opacity-60', 'cursor-not-allowed');
     const icon = btnRefresh.querySelector('i');
     if (icon) icon.classList.add('animate-spin');
+    const label = btnRefresh.querySelector('span');
+    if (label) label.textContent = 'กำลังวิเคราะห์...';
+  }
+  if (forceRefresh && content) {
+    content.classList.add('opacity-50', 'animate-pulse');
   }
 
   try {
@@ -3561,8 +3597,32 @@ async function loadAiAnalysis(forceRefresh = false) {
     isAiLoading = false;
     if (btnRefresh) {
       btnRefresh.disabled = false;
+      btnRefresh.classList.remove('opacity-60', 'cursor-not-allowed');
       const icon = btnRefresh.querySelector('i');
       if (icon) icon.classList.remove('animate-spin');
+      const label = btnRefresh.querySelector('span');
+      if (label) label.textContent = 'วิเคราะห์ใหม่';
+    }
+    if (content) {
+      content.classList.remove('opacity-50', 'animate-pulse');
+    }
+    const updatedBadge = document.getElementById('aiUpdatedTimeBadge');
+    if (updatedBadge && forceRefresh) {
+      const now = new Date().toLocaleTimeString('th-TH', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      updatedBadge.textContent = `ประมวลผลล่าสุด: ${now} น.`;
+    }
+    if (forceRefresh) {
+      const section = document.getElementById('aiAnalysisSection');
+      if (section) {
+        section.classList.remove('ai-analysis-refresh-flash');
+        void section.offsetWidth;
+        section.classList.add('ai-analysis-refresh-flash');
+        setTimeout(() => section.classList.remove('ai-analysis-refresh-flash'), 1100);
+      }
     }
   }
 }

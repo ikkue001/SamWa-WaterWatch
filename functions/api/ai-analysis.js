@@ -26,6 +26,8 @@ const STATIONS_INFO_BASELINE = [
 function cleanThaiText(text) {
   if (typeof text !== 'string') return text;
   return text
+    .replace(/\(\s*ขออภัย\b[^)]*\)/gi, '')
+    .replace(/ขออภัย\s*[:：-]?\s*/gi, '')
     .replace(/排水/g, '')
     .replace(/[\u4e00-\u9fa5]/g, '') // ลบตัวอักษรจีนที่อาจหลุดมา
     .replace(/\s{2,}/g, ' ')
