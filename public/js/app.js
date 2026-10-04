@@ -4249,11 +4249,12 @@ function renderStationSelectorButtons() {
     const activeClass = isSelected
       ? 'bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-sm font-bold ring-1 ring-sky-400/30'
       : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800';
+    const tabLabel = st.stCode === 'ST-9' ? 'ปตร.คลองสามวา' : st.canal;
 
     return `
       <button type="button" data-station-id="${st.id}" onclick="selectStationChart('${st.id}')" aria-label="ดูกราฟประวัติระดับน้ำ ${st.stCode} ${st.name}" class="min-h-[44px] px-3.5 py-2 rounded-xl border text-xs whitespace-nowrap shrink-0 transition touch-manipulation flex items-center gap-1.5 ${activeClass}">
         <span class="font-mono font-bold">${st.stCode}</span>
-        <span class="text-[11px] truncate max-w-[120px]">${st.canal}</span>
+        <span class="text-[11px] whitespace-nowrap">${tabLabel}</span>
       </button>
     `;
   }).join('');
