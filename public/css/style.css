@@ -1,7 +1,5 @@
 /* Custom styling and Emergency Alert animations */
 
-@import url('https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Kanit:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
-
 :root {
   --danger-red: #ef4444;
   --warning-amber: #f59e0b;
@@ -748,4 +746,23 @@ body.emergency-active {
   font-weight: 600 !important;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
   padding: 4px 8px !important;
+}
+
+/* ========================================================
+   ACCESSIBILITY & TOUCH TARGETS (WCAG 2.5.5 / 2.5.8 >= 44x44px)
+   ======================================================== */
+.leaflet-control-zoom a {
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  font-size: 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  touch-action: manipulation !important;
+}
+
+.touch-target-44 {
+  min-height: 44px !important;
+  min-width: 44px !important;
 }
