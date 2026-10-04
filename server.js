@@ -1105,15 +1105,17 @@ app.get('/api/ai-analysis', async (req, res) => {
   const processed = getProcessedStations();
   const analyzedAt = new Date().toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok' });
 
-  // Validate API key format (must start with AIza)
-  if (!apiKey || !apiKey.startsWith('AIza')) {
-    console.warn('[server.js] GEMINI_API_KEY is missing or does not start with AIza.');
+  // Missing API key (no prefix restriction to support all keys)
+  if (!apiKey) {
+    console.warn('[server.js] GEMINI_API_KEY is missing.');
     const fallback = generateHydrologicalFallbackServer(processed);
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.json({
       success: false,
-      error: 'INVALID_OR_MISSING_API_KEY',
-      message: 'กรุณาใส่ Gemini API Key (ที่ขึ้นต้นด้วย AIza...) ใน Cloudflare Pages',
+      apiError: { message: "GEMINI_API_KEY is not defined in environment" },
+      debugEnvFound: false,
+      error: 'MISSING_API_KEY',
+      message: 'กรุณาใส่ Gemini API Key ใน environment variable',
       modelUsed: 'hydrological-expert-system',
       analyzedAt,
       ...fallback
@@ -1214,6 +1216,8 @@ ${JSON.stringify({
 
         result = {
           success: true,
+          apiError: null,
+          debugEnvFound: true,
           modelUsed: 'gemini-3.5-flash-lite',
           source: 'gemini-3.5-flash-lite',
           risk_level: risk,
@@ -1233,17 +1237,50 @@ ${JSON.stringify({
         };
       }
     } else {
-      const errText = await geminiRes.text();
-      console.warn(`[server.js] Gemini API HTTP ${geminiRes.status}:`, errText);
+      let errorData = null;
+      const rawErr = await geminiRes.text();
+      try {
+        errorData = JSON.parse(rawErr);
+      } catch (_) {
+        errorData = { status: geminiRes.status, statusText: geminiRes.statusText, message: rawErr };
+      }
+      console.warn(`[server.js] Gemini API HTTP ${geminiRes.status}:`, errorData);
+      const fallback = generateHydrologicalFallbackServer(processed);
+      res.set('Cache-Control', 'no-store');
+      return res.json({
+        success: false,
+        apiError: errorData,
+        debugEnvFound: !!apiKey,
+        status: geminiRes.status,
+        error: `GEMINI_HTTP_${geminiRes.status}`,
+        message: typeof errorData?.error?.message === 'string' ? errorData.error.message : `Gemini API Error (${geminiRes.status})`,
+        modelUsed: "hydrological-expert-system",
+        analyzedAt,
+        ...fallback
+      });
     }
   } catch (e) {
     console.warn('[server.js] Gemini API call error:', e.message);
+    const fallback = generateHydrologicalFallbackServer(processed);
+    res.set('Cache-Control', 'no-store');
+    return res.json({
+      success: false,
+      apiError: { message: e.message, stack: e.stack },
+      debugEnvFound: !!apiKey,
+      error: 'GEMINI_CALL_FAILED',
+      message: e.message,
+      modelUsed: 'hydrological-expert-system',
+      analyzedAt,
+      ...fallback
+    });
   }
 
   if (!result) {
     const fallback = generateHydrologicalFallbackServer(processed);
     result = {
       success: false,
+      apiError: { message: "Empty candidate text returned from Gemini API" },
+      debugEnvFound: !!apiKey,
       error: 'GEMINI_CALL_FAILED',
       message: 'ไม่สามารถเรียกใช้ Gemini API ได้ กำลังใช้งานระบบประเมินอุทกวิทยาอัตโนมัติ',
       modelUsed: 'hydrological-expert-system',

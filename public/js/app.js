@@ -3271,14 +3271,14 @@ function renderAiAnalysis(data) {
   const updatedBadge = document.getElementById('aiUpdatedTimeBadge');
   const headerRiskBadge = document.getElementById('aiHeaderRiskBadge');
 
-  const isGeminiSuccess = Boolean(data.success === true && (data.modelUsed === 'gemini-3.5-flash-lite' || data.source?.includes('gemini')));
+  const isGeminiSuccess = Boolean(data.success === true && (data.modelUsed === 'gemini-3.5-flash-lite' || data.source?.includes('gemini') || !data.modelUsed?.includes('hydrological')));
   const analyzedTime = data.analyzedAt ? `${data.analyzedAt} น.` : (data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.' : 'ประมวลผลล่าสุด');
 
   // 1. Header Model Badge
   if (modelBadge) {
     if (isGeminiSuccess) {
       modelBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm flex items-center gap-1 font-mono';
-      modelBadge.innerHTML = '<i data-lucide="zap" class="w-3 h-3 text-amber-400"></i><span>⚡ วิเคราะห์ด้วย Gemini 3.5 Flash Lite</span>';
+      modelBadge.innerHTML = '<span class="text-amber-400 select-none">✨</span><span>วิเคราะห์ด้วย Gemini 3.5 Flash Lite</span>';
     } else {
       modelBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-sm flex items-center gap-1 font-mono';
       modelBadge.innerHTML = '<i data-lucide="alert-triangle" class="w-3 h-3 text-amber-400"></i><span>⚠️ โหมดประเมินอัตโนมัติ</span>';
@@ -3399,11 +3399,16 @@ function renderAiAnalysis(data) {
 
     <!-- 4. Warning Bar When AI Call is Not Configured or Failed -->
     ${!isGeminiSuccess ? `
-      <div class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm mt-1">
+      <div id="aiEvaluationWarningBanner" class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm mt-1">
         <div class="flex items-center gap-2">
           <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0"></i>
           <span class="font-bold">⚠️ โหมดประเมินอัตโนมัติ (ยังไม่ได้เชื่อมต่อ Gemini API Key)</span>
         </div>
+        ${data.apiError && (data.apiError.error?.message || data.apiError.message) ? `
+          <div class="text-[11px] text-amber-300/80 font-mono mt-0.5 pl-6">
+            Error: ${String(data.apiError.error?.message || data.apiError.message).slice(0, 120)}
+          </div>
+        ` : ''}
         <span class="text-[11px] text-amber-400/80 font-mono">เวลาประเมิน: ${analyzedTime}</span>
       </div>
     ` : ''}
@@ -3420,8 +3425,8 @@ function renderAiAnalysis(data) {
       <div class="flex items-center gap-2.5 text-[11px] text-slate-300 font-mono">
         ${isGeminiSuccess ? `
           <span class="px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-400/40 text-[10px] font-bold flex items-center gap-1">
-            <i data-lucide="zap" class="w-3 h-3 text-amber-400"></i>
-            <span>⚡ วิเคราะห์ด้วย Gemini 3.5 Flash Lite</span>
+            <span class="text-amber-400 select-none">✨</span>
+            <span>วิเคราะห์ด้วย Gemini 3.5 Flash Lite</span>
           </span>
         ` : `
           <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700/60">
