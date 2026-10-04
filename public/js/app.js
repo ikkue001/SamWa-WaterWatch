@@ -1576,6 +1576,7 @@ function updateMapMarkers() {
         <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between gap-2 text-[11px] text-slate-400">
           <span class="whitespace-nowrap">เวลา: <b class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'font-mono'}">${formatPopupTime(station.updatedAt || station.time)}</b> ${station.isStale && station.staleText ? `<span class="text-[10px] text-amber-400/90">(${station.staleText})</span>` : ''}</span>
           <div class="flex items-center gap-2 shrink-0">
+            <button type="button" onclick="focusStationCard('${station.id}')" class="text-cyan-400 hover:text-cyan-300 font-semibold whitespace-nowrap">การ์ดสถานี ⬇</button>
             <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="${station.isStale ? 'text-amber-300 hover:text-amber-200' : 'text-sky-400 hover:text-sky-300'} font-semibold flex items-center gap-1">
               <span>ต้นทาง ↗</span>
               <i data-lucide="external-link" class="w-3 h-3"></i>
@@ -1704,6 +1705,49 @@ function focusStationOnMap(stationId) {
   }, 1050);
 }
 window.focusStationOnMap = focusStationOnMap;
+
+function getCurrentChartStation() {
+  return (appState.stations || []).find(station =>
+    station.id === currentChartStationId || station.stCode === currentChartStationId
+  ) || ALL_CHART_STATIONS.find(station =>
+    station.id === currentChartStationId || station.stCode === currentChartStationId
+  ) || null;
+}
+
+function focusStationCard(stationId) {
+  const card = document.querySelector(`[data-station-card="${stationId}"]`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.classList.remove('station-card-focus-flash');
+  void card.offsetWidth;
+  card.classList.add('station-card-focus-flash');
+  setTimeout(() => card.classList.remove('station-card-focus-flash'), 1600);
+}
+window.focusStationCard = focusStationCard;
+
+function focusChartStationOnMap(stationId) {
+  const station = (appState.stations || []).find(item =>
+    item.id === stationId || item.stCode === stationId
+  );
+  if (!station || !station.lat || !station.lng) return;
+  const mapSection = document.getElementById('mapSection');
+  if (mapSection) mapSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  focusStationOnMap(station.id);
+}
+
+function bindChartQuickActions() {
+  const mapButton = document.getElementById('chartMapShortcut');
+  const cardButton = document.getElementById('chartCardShortcut');
+  if (mapButton) mapButton.onclick = () => {
+    const station = getCurrentChartStation();
+    if (station) focusChartStationOnMap(station.id);
+  };
+  if (cardButton) cardButton.onclick = () => {
+    const station = getCurrentChartStation();
+    if (station) focusStationCard(station.id);
+  };
+}
+window.focusChartStationOnMap = focusChartStationOnMap;
 
 function fitMapToAllStations() {
   if (!leafletMap || !appState.stations || appState.stations.length === 0) return;
@@ -4308,6 +4352,28 @@ function renderWaterHistoryChart(stationId, liveData) {
     if (st.waterLevels && st.waterLevels.length > 0) {
       st.waterLevels[st.waterLevels.length - 1] = cardWaterLevel;
     }
+
+    const historyLevels = st.waterLevels
+      .map(value => Number(value))
+      .filter(Number.isFinite);
+    const currentLevel = Number(st.currentLevel ?? historyLevels[historyLevels.length - 1]);
+    const allLevels = Number.isFinite(currentLevel)
+      ? [...historyLevels, currentLevel]
+      : historyLevels;
+    const maxVal = allLevels.length > 0 ? Math.max(...allLevels) : null;
+    const minVal = allLevels.length > 0 ? Math.min(...allLevels) : null;
+    const diff24h = Number.isFinite(currentLevel) && historyLevels.length > 0
+      ? currentLevel - historyLevels[0]
+      : null;
+    const diff24hText = diff24h === null
+      ? '--'
+      : `${diff24h >= 0 ? '+' : ''}${diff24h.toFixed(2)}`;
+    st.stats = {
+      ...(st.stats || {}),
+      max: maxVal,
+      min: minVal,
+      change24h: diff24hText
+    };
   }
 
   // Thresholds standard specs
@@ -4383,6 +4449,7 @@ function renderWaterHistoryChart(stationId, liveData) {
   if (statMax) statMax.textContent = (st.stats && typeof st.stats.max === 'number') ? st.stats.max.toFixed(2) : '--';
   if (statMin) statMin.textContent = (st.stats && typeof st.stats.min === 'number') ? st.stats.min.toFixed(2) : '--';
   if (statChg) statChg.textContent = st.stats?.change24h || '--';
+  bindChartQuickActions();
 
   // Check Chart.js availability
   if (typeof Chart === 'undefined') {

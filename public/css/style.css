@@ -763,6 +763,31 @@ body.emergency-active {
   scrollbar-width: none;
 }
 
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.station-card-focus-flash {
+  animation: station-card-focus-flash 1.5s ease-out;
+}
+
+@keyframes station-card-focus-flash {
+  0% {
+    box-shadow: 0 0 0 rgba(56, 189, 248, 0);
+  }
+  35% {
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.7), 0 0 24px rgba(56, 189, 248, 0.42);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(56, 189, 248, 0);
+  }
+}
+
 /* ========================================================
    DUAL-CANAL JUNCTION BOUNDARY CONNECTION (LEAFLET)
    ======================================================== */
