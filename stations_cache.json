@@ -30,9 +30,9 @@
     "isPinned": true,
     "source": "Thaiwater ปทุมธานี",
     "sourceUrl": "https://pathumthani.thaiwater.net/wl#close",
-    "updatedAt": "2026-10-04 15:40",
+    "updatedAt": "2026-10-04 16:10",
     "isStale": false,
-    "lastValidTime": "2026-10-04 15:40",
+    "lastValidTime": "2026-10-04 16:10",
     "lastValidLevel": 1.93
   },
   {
@@ -65,9 +65,9 @@
     "isPinned": true,
     "source": "BMA Waterflow",
     "sourceUrl": "https://bmawaterflow.bangkok.go.th/map",
-    "updatedAt": "2026-10-04T15:50:20",
+    "updatedAt": "2026-10-04T16:15:20",
     "isStale": false,
-    "lastValidTime": "2026-10-04T15:50:20",
+    "lastValidTime": "2026-10-04T16:15:20",
     "lastValidLevel": 1.79
   },
   {
@@ -100,9 +100,9 @@
     "isPinned": true,
     "source": "BMA Waterflow",
     "sourceUrl": "https://bmawaterflow.bangkok.go.th/map",
-    "updatedAt": "2026-10-04T15:50:20",
+    "updatedAt": "2026-10-04T16:15:20",
     "isStale": false,
-    "lastValidTime": "2026-10-04T15:50:20",
+    "lastValidTime": "2026-10-04T16:15:20",
     "lastValidLevel": 1.48
   },
   {
@@ -112,15 +112,15 @@
     "stationCode": "WL.K08.01",
     "name": "ปตร.คลองแปด ตอนซอย อบจ.ปทุมธานี 2006",
     "shortName": "ปตร.คลองแปด ตอนซอย อบจ.ปทุมธานี 2006",
-    "waterLevel": 1.79,
+    "waterLevel": 1.56,
     "bankLevel": 2,
     "warningLevel": 1.4,
     "criticalLevel": 1.8,
-    "diff": -0.21,
-    "diffCritical": -0.01,
-    "diffText": "ต่ำกว่าตลิ่ง 0.21 ม.",
+    "diff": -0.44,
+    "diffCritical": -0.24,
+    "diffText": "ต่ำกว่าตลิ่ง 0.44 ม.",
     "unit": "ม.รทก.",
-    "storagePercent": 89.5,
+    "storagePercent": 78,
     "isOverflow": false,
     "isWarning": false,
     "isCritical": false,
@@ -135,10 +135,10 @@
     "isPinned": true,
     "source": "BMA Waterflow",
     "sourceUrl": "https://bmawaterflow.bangkok.go.th/map",
-    "updatedAt": "2026-10-04T15:50:20",
+    "updatedAt": "2026-10-04T16:15:20",
     "isStale": false,
-    "lastValidTime": "2026-10-04T15:50:20",
-    "lastValidLevel": 1.79
+    "lastValidTime": "2026-10-04T16:15:20",
+    "lastValidLevel": 1.56
   },
   {
     "id": "bma_weather_126",
@@ -147,15 +147,15 @@
     "stationCode": "WL.PSR.02",
     "name": "คลองพระยาสุเรนทร์ ตอนถนนหนองระแหง",
     "shortName": "คลองพระยาสุเรนทร์ ตอนถนนหนองระแหง",
-    "waterLevel": 1.28,
+    "waterLevel": 1.27,
     "bankLevel": 1.6,
     "warningLevel": 1,
     "criticalLevel": 1.2,
-    "diff": -0.32,
-    "diffCritical": 0.08,
-    "diffText": "+0.08 ม. (เกินเกณฑ์วิกฤติ)",
+    "diff": -0.33,
+    "diffCritical": 0.07,
+    "diffText": "+0.07 ม. (เกินเกณฑ์วิกฤติ)",
     "unit": "ม.รทก.",
-    "storagePercent": 80,
+    "storagePercent": 79.4,
     "isOverflow": false,
     "isWarning": true,
     "isCritical": true,
@@ -170,10 +170,10 @@
     "isPinned": false,
     "source": "BMA Weather",
     "sourceUrl": "https://weather.bangkok.go.th/water/StationDetail?id=126",
-    "updatedAt": "04/10/2569 15:55",
+    "updatedAt": "04/10/2569 16:20",
     "isStale": false,
-    "lastValidTime": "04/10/2569 15:55",
-    "lastValidLevel": 1.28
+    "lastValidTime": "04/10/2569 16:20",
+    "lastValidLevel": 1.27
   },
   {
     "id": "bma_weather_125",
@@ -205,9 +205,9 @@
     "isPinned": false,
     "source": "BMA Weather",
     "sourceUrl": "https://weather.bangkok.go.th/water/StationDetail?id=125",
-    "updatedAt": "04/10/2569 15:50",
+    "updatedAt": "04/10/2569 16:20",
     "isStale": false,
-    "lastValidTime": "04/10/2569 15:50",
+    "lastValidTime": "04/10/2569 16:20",
     "lastValidLevel": 1.24
   },
   {
@@ -240,9 +240,9 @@
     "isPinned": false,
     "source": "BMA Weather",
     "sourceUrl": "https://weather.bangkok.go.th/water/StationDetail?id=124",
-    "updatedAt": "04/10/2569 15:55",
+    "updatedAt": "04/10/2569 16:20",
     "isStale": false,
-    "lastValidTime": "04/10/2569 15:55",
+    "lastValidTime": "04/10/2569 16:20",
     "lastValidLevel": 0.85
   },
   {
@@ -275,9 +275,9 @@
     "isPinned": false,
     "source": "BMA Weather",
     "sourceUrl": "https://weather.bangkok.go.th/water/StationDetail?id=127",
-    "updatedAt": "04/10/2569 15:55",
+    "updatedAt": "04/10/2569 16:20",
     "isStale": false,
-    "lastValidTime": "04/10/2569 15:55",
+    "lastValidTime": "04/10/2569 16:20",
     "lastValidLevel": 0.87
   },
   {
@@ -343,9 +343,9 @@
     "isPinned": false,
     "source": "BMA Weather",
     "sourceUrl": "https://weather.bangkok.go.th/water/StationDetail?id=21",
-    "updatedAt": "04/10/2569 15:55",
+    "updatedAt": "04/10/2569 16:20",
     "isStale": false,
-    "lastValidTime": "04/10/2569 15:55",
+    "lastValidTime": "04/10/2569 16:20",
     "lastValidLevel": 1.34
   }
 ]

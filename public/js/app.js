@@ -338,17 +338,80 @@ function evaluateStationStaleness(station, now = new Date()) {
 }
 
 /**
- * Auto-Fetch on First Load Core Wrappers
+ * Update Header Live Clock immediately without waiting for API response
+ */
+function updateHeaderTime() {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+
+  const timeEl = document.getElementById('lastUpdatedTime') ||
+                 document.getElementById('current-time') ||
+                 document.querySelector('.header-time');
+  if (timeEl) {
+    if (appState && appState.lastUpdated) {
+      const d = new Date(appState.lastUpdated);
+      timeEl.textContent = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+    } else {
+      timeEl.textContent = timeStr;
+    }
+  }
+
+  const timeMobileEl = document.getElementById('lastUpdatedTimeMobile');
+  if (timeMobileEl) {
+    if (appState && appState.lastUpdated) {
+      const d = new Date(appState.lastUpdated);
+      timeMobileEl.textContent = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+    } else {
+      timeMobileEl.textContent = timeStr;
+    }
+  }
+}
+window.updateHeaderTime = updateHeaderTime;
+
+/**
+ * Auto-Fetch on First Load Core Wrappers (Decoupled & Fault-Tolerant)
  */
 async function fetchAllStationData() {
-  return await fetchWaterSummary();
+  try {
+    return await fetchWaterSummary();
+  } catch (err) {
+    console.error('Failed to load stations in fetchAllStationData:', err);
+    markPinnedCardsNoData();
+    if (!appState.hasRenderedOnce) {
+      appState.hasRenderedOnce = true;
+      renderSection1SmartCanalGPS();
+      renderSection2PinnedPriority();
+      renderSection3AllCanals();
+    }
+    return null;
+  }
 }
 window.fetchAllStationData = fetchAllStationData;
 
 async function fetchAiAnalysis(forceRefresh = false) {
-  return await loadAiAnalysis(forceRefresh);
+  try {
+    return await loadAiAnalysis(forceRefresh);
+  } catch (err) {
+    console.error('Failed to load AI in fetchAiAnalysis:', err);
+    renderAiFallback(err);
+    return null;
+  }
 }
 window.fetchAiAnalysis = fetchAiAnalysis;
+
+async function fetchWaterHistory(stationCodeOrId = 'ST-1') {
+  try {
+    await loadChartJs();
+    const target = ALL_CHART_STATIONS.find(s => s.stCode === stationCodeOrId || s.id === stationCodeOrId) || ALL_CHART_STATIONS[0];
+    const stationId = target ? target.id : (stationCodeOrId || 'thaiwater_k8');
+    currentChartStationId = stationId;
+    await selectStationChart(stationId);
+  } catch (err) {
+    console.error('Failed to load chart history in fetchWaterHistory:', err);
+    renderChartFallbackMessage();
+  }
+}
+window.fetchWaterHistory = fetchWaterHistory;
 
 function startRefreshTimer() {
   resetCountdown(120);
@@ -356,33 +419,74 @@ function startRefreshTimer() {
 }
 window.startRefreshTimer = startRefreshTimer;
 
-function initializeApplication() {
-  if (window.lucide) {
-    window.lucide.createIcons();
+let appInitialized = false;
+
+async function initializeApplication() {
+  if (appInitialized) return;
+  appInitialized = true;
+
+  // 1. เริ่มเวลานาฬิกา Header ทันที ไม่ต้องรอข้อมูล
+  updateHeaderTime();
+  if (!window._headerTimeInterval) {
+    window._headerTimeInterval = setInterval(updateHeaderTime, 1000);
   }
 
-  setupEventListeners();
+  if (window.lucide) {
+    try { window.lucide.createIcons(); } catch (e) {}
+  }
 
-  // Initialize Interactive Map (Leaflet & OSM)
-  initLeafletMap();
+  try {
+    setupEventListeners();
+  } catch (err) {
+    console.error('Error in setupEventListeners:', err);
+  }
+
+  // Initialize Interactive Map (Leaflet & OSM with guard check)
+  try {
+    initLeafletMap();
+  } catch (err) {
+    console.error('Error in initLeafletMap:', err);
+  }
 
   // Connect Realtime SSE Stream
-  initRealtimeSSE();
+  try {
+    initRealtimeSSE();
+  } catch (err) {
+    console.warn('Realtime SSE error:', err);
+  }
 
-  // Recalculate distances based on default Sam Wa center coords (GPS requested only on explicit user click to satisfy Lighthouse Best Practices & privacy)
-  recalculateDistances();
+  // Recalculate distances based on default Sam Wa center coords
+  try {
+    recalculateDistances();
+  } catch (err) {}
 
-  // Lazy-loaded 24-Hour Historical Water Level Chart with IntersectionObserver
-  setupChartIntersectionObserver();
+  // 2. ดึงข้อมูลสถานีและแผนที่ (แยกอิสระ)
+  try {
+    await fetchAllStationData();
+  } catch (err) {
+    console.error('Failed to load stations:', err);
+  }
 
-  // 1. เรียกข้อมูลสถานีทันที
-  fetchAllStationData();
+  // 3. ดึงบทวิเคราะห์ AI (แยกอิสระ)
+  try {
+    await fetchAiAnalysis();
+  } catch (err) {
+    console.error('Failed to load AI:', err);
+    renderAiFallback(err);
+  }
 
-  // 2. เรียกบทวิเคราะห์ AI ทันที
-  fetchAiAnalysis();
+  // 4. ดึงข้อมูลกราฟ (แยกอิสระ)
+  try {
+    await fetchWaterHistory('ST-1');
+  } catch (err) {
+    console.error('Failed to load chart history:', err);
+    renderChartFallbackMessage();
+  }
 
-  // 3. แล้วค่อยเริ่มจับเวลานับถอยหลังรอบถัดไป
-  startRefreshTimer();
+  // 5. แล้วค่อยเริ่มจับเวลานับถอยหลังรอบถัดไป
+  try {
+    startRefreshTimer();
+  } catch (err) {}
 }
 
 // Immediate execution check: If DOM is already loaded/interactive, run immediately without waiting!
@@ -1017,72 +1121,81 @@ function updateHeaderStatus() {
 
 function initLeafletMap() {
   if (typeof L === 'undefined') {
-    console.warn('Leaflet is not loaded yet, retrying in 250ms...');
-    setTimeout(initLeafletMap, 250);
+    setTimeout(initLeafletMap, 100);
     return;
   }
 
   const mapElement = document.getElementById('floodMap');
   if (!mapElement) return;
-  if (leafletMap) return;
+  if (leafletMap || mapElement._leaflet_id) return;
 
-  // Center around Lam Luk Ka / Sai Mai / Khlong Sam Wa border
-  leafletMap = L.map('floodMap', {
-    center: [13.885, 100.72],
-    zoom: 12,
-    zoomControl: true,
-    scrollWheelZoom: true,
-    touchZoom: true,
-    tap: false
-  });
-
-  // Keep map properly sized during mobile orientation/viewport resize
-  window.addEventListener('resize', () => {
-    if (leafletMap) leafletMap.invalidateSize();
-  });
-
-  // Esri World Dark Gray Canvas Tile Layer (100% Free, No API Key required)
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
-    maxZoom: 16,
-    subdomains: ['server', 'services']
-  }).addTo(leafletMap);
-
-  // Set accessible Thai labels and attributes on Leaflet Zoom controls
-  const zoomIn = mapElement.querySelector('.leaflet-control-zoom-in');
-  if (zoomIn) {
-    zoomIn.setAttribute('aria-label', 'ซูมเข้าแผนที่');
-    zoomIn.setAttribute('title', 'ซูมเข้าแผนที่');
-  }
-  const zoomOut = mapElement.querySelector('.leaflet-control-zoom-out');
-  if (zoomOut) {
-    zoomOut.setAttribute('aria-label', 'ซูมออกแผนที่');
-    zoomOut.setAttribute('title', 'ซูมออกแผนที่');
-  }
-
-  // Map Header Buttons
-  const btnFitAll = document.getElementById('btnMapFitAll');
-  if (btnFitAll) {
-    btnFitAll.addEventListener('click', fitMapToAllStations);
-  }
-
-  const btnGoUser = document.getElementById('btnMapGoUser');
-  if (btnGoUser) {
-    btnGoUser.addEventListener('click', () => {
-      initGeolocation(true);
-      panMapToUser();
+  try {
+    // Center around Lam Luk Ka / Sai Mai / Khlong Sam Wa border
+    leafletMap = L.map('floodMap', {
+      center: [13.885, 100.72],
+      zoom: 12,
+      zoomControl: true,
+      scrollWheelZoom: true,
+      touchZoom: true,
+      tap: false
     });
-  }
 
-  // Trigger lucide icon creation whenever popup opens
-  leafletMap.on('popupopen', () => {
-    if (window.lucide) window.lucide.createIcons();
-  });
+    // Keep map properly sized during mobile orientation/viewport resize
+    window.addEventListener('resize', () => {
+      if (leafletMap) leafletMap.invalidateSize();
+    });
 
-  if (appState.stations && appState.stations.length > 0) {
-    updateMapMarkers();
+    // Esri World Dark Gray Canvas Tile Layer (100% Free, No API Key required)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+      maxZoom: 16,
+      subdomains: ['server', 'services']
+    }).addTo(leafletMap);
+
+    // Set accessible Thai labels and attributes on Leaflet Zoom controls
+    setTimeout(() => {
+      try {
+        const zoomIn = mapElement.querySelector('.leaflet-control-zoom-in');
+        if (zoomIn) {
+          zoomIn.setAttribute('aria-label', 'ซูมเข้าแผนที่');
+          zoomIn.setAttribute('title', 'ซูมเข้าแผนที่');
+        }
+        const zoomOut = mapElement.querySelector('.leaflet-control-zoom-out');
+        if (zoomOut) {
+          zoomOut.setAttribute('aria-label', 'ซูมออกแผนที่');
+          zoomOut.setAttribute('title', 'ซูมออกแผนที่');
+        }
+      } catch (e) {}
+    }, 100);
+
+    // Map Header Buttons
+    const btnFitAll = document.getElementById('btnMapFitAll');
+    if (btnFitAll) {
+      btnFitAll.addEventListener('click', fitMapToAllStations);
+    }
+
+    const btnGoUser = document.getElementById('btnMapGoUser');
+    if (btnGoUser) {
+      btnGoUser.addEventListener('click', () => {
+        initGeolocation(true);
+        panMapToUser();
+      });
+    }
+
+    // Trigger lucide icon creation whenever popup opens
+    leafletMap.on('popupopen', () => {
+      if (window.lucide) window.lucide.createIcons();
+    });
+
+    if (appState.stations && appState.stations.length > 0) {
+      updateMapMarkers();
+    }
+  } catch (mapErr) {
+    console.error('[Leaflet Map Init Error]:', mapErr);
   }
 }
+window.initMap = initLeafletMap;
+window.initLeafletMap = initLeafletMap;
 
 /**
  * Update Leaflet Map Markers & Proximity Circle
@@ -3642,12 +3755,48 @@ function renderAiAnalysis(data) {
 
   if (skeleton) {
     skeleton.classList.add('hidden');
+    skeleton.classList.remove('animate-pulse');
   }
 
   if (window.lucide) {
     window.lucide.createIcons();
   }
 }
+
+/**
+ * Always end the AI loading state, including when rendering the normal
+ * response or fallback response itself fails.
+ */
+function renderAiFallback(error) {
+  const skeleton = document.getElementById('aiLoadingSkeleton');
+  const content = document.getElementById('aiAnalysisContent');
+  const message = 'ยังไม่สามารถโหลดบทวิเคราะห์ AI ได้ ขณะนี้ระบบจะแสดงข้อมูลระดับน้ำและสถานะแจ้งเตือนตามปกติ';
+
+  if (skeleton) {
+    skeleton.classList.add('hidden');
+    skeleton.classList.remove('animate-pulse');
+  }
+  if (content) {
+    content.classList.remove('hidden');
+    content.innerHTML = `
+      <div class="p-3.5 rounded-2xl border border-amber-500/30 bg-amber-950/20 text-amber-200 text-sm leading-relaxed">
+        <div class="flex items-start gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"></i>
+          <span>${message}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  const modelBadge = document.getElementById('aiModelBadge');
+  if (modelBadge) {
+    modelBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-sm flex items-center gap-1 font-mono';
+    modelBadge.textContent = 'โหมดประเมินอัตโนมัติ';
+  }
+  if (window.lucide) window.lucide.createIcons();
+  if (error) console.error('AI fallback rendered:', error);
+}
+window.renderAiFallback = renderAiFallback;
 
 /**
  * ========================================================
@@ -3675,6 +3824,11 @@ function loadChartJs() {
     script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
     script.async = true;
     script.onload = () => {
+      if (typeof Chart === 'undefined') {
+        chartJsLoadingPromise = null;
+        reject(new Error('Chart.js loaded without exposing the Chart global'));
+        return;
+      }
       console.log('[Chart.js]: Loaded dynamically on-demand');
       resolve(window.Chart);
     };
@@ -3688,6 +3842,45 @@ function loadChartJs() {
   return chartJsLoadingPromise;
 }
 window.loadChartJs = loadChartJs;
+
+function renderChartFallbackMessage(message = 'อยู่ระหว่างเชื่อมต่อข้อมูลย้อนหลัง') {
+  const canvas = document.getElementById('waterHistoryCanvas');
+  if (!canvas) return;
+
+  const container = canvas.parentElement;
+  if (!container) return;
+  canvas.classList.add('hidden');
+
+  let fallback = document.getElementById('chartFallbackMessage');
+  if (!fallback) {
+    fallback = document.createElement('div');
+    fallback.id = 'chartFallbackMessage';
+    fallback.className = 'absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-slate-400';
+    container.appendChild(fallback);
+  }
+  fallback.textContent = message;
+}
+
+function clearChartFallbackMessage() {
+  const canvas = document.getElementById('waterHistoryCanvas');
+  if (canvas) canvas.classList.remove('hidden');
+  const fallback = document.getElementById('chartFallbackMessage');
+  if (fallback) fallback.remove();
+}
+
+function initChart(stationId = currentChartStationId, liveData) {
+  if (typeof Chart === 'undefined') {
+    loadChartJs()
+      .then(() => renderWaterHistoryChart(stationId, liveData))
+      .catch(err => {
+        console.warn('[Chart.js]: Chart library unavailable', err);
+        renderChartFallbackMessage();
+      });
+    return;
+  }
+  renderWaterHistoryChart(stationId, liveData);
+}
+window.initChart = initChart;
 
 /**
  * Setup IntersectionObserver to trigger Chart.js loading only when user scrolls near the chart
@@ -3746,12 +3939,12 @@ async function initWaterHistoryChart() {
     }
 
     renderStationSelectorButtons();
-    renderWaterHistoryChart(currentChartStationId, targetData);
+    initChart(currentChartStationId, targetData);
   } catch (err) {
     console.warn('[Water History Error] Using fallback telemetry history:', err);
     historicalDataCache = generateClientSideHistoryFallback();
     renderStationSelectorButtons();
-    renderWaterHistoryChart(currentChartStationId);
+    initChart(currentChartStationId);
   } finally {
     if (overlay) overlay.classList.add('hidden');
   }
@@ -3857,13 +4050,13 @@ async function selectStationChart(stationId) {
       historicalDataCache[stationId] = targetData;
       if (targetData.id) historicalDataCache[targetData.id] = targetData;
       if (targetData.stCode) historicalDataCache[targetData.stCode] = targetData;
-      renderWaterHistoryChart(stationId, targetData);
+      initChart(stationId, targetData);
     } else {
-      renderWaterHistoryChart(stationId);
+      initChart(stationId);
     }
   } catch (err) {
     console.warn('[Water History] Failed on-demand fetch for', stationId, err);
-    renderWaterHistoryChart(stationId);
+    initChart(stationId);
   } finally {
     if (overlay) overlay.classList.add('hidden');
   }
@@ -3871,9 +4064,7 @@ async function selectStationChart(stationId) {
 window.selectStationChart = selectStationChart;
 
 function viewStationHistory(stationId) {
-  loadChartJs().then(() => {
-    selectStationChart(stationId);
-  });
+  selectStationChart(stationId);
   const section = document.getElementById('waterHistorySection');
   if (section) {
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -3883,10 +4074,7 @@ window.viewStationHistory = viewStationHistory;
 
 function renderWaterHistoryChart(stationId, liveData) {
   if (typeof Chart === 'undefined') {
-    console.warn('[Chart.js]: Waiting for Chart library to initialize...');
-    loadChartJs().then(() => {
-      renderWaterHistoryChart(stationId, liveData);
-    });
+    initChart(stationId, liveData);
     return;
   }
 
@@ -3895,7 +4083,14 @@ function renderWaterHistoryChart(stationId, liveData) {
     st = historicalDataCache[stationId] || 
          Object.values(historicalDataCache).find(s => s && (s.id === stationId || s.stCode === stationId));
   }
-  if (!st) return;
+  if (!st || !Array.isArray(st.waterLevels) || st.waterLevels.length === 0) {
+    renderChartFallbackMessage();
+    return;
+  }
+  clearChartFallbackMessage();
+  if (!Array.isArray(st.timeLabels) || st.timeLabels.length !== st.waterLevels.length) {
+    st.timeLabels = st.waterLevels.map((_, index) => `${index + 1}:00`);
+  }
 
   const canvas = document.getElementById('waterHistoryCanvas');
   if (!canvas) return;
@@ -4136,4 +4331,3 @@ function renderWaterHistoryChart(stationId, liveData) {
     window.lucide.createIcons();
   }
 }
-
