@@ -3262,6 +3262,15 @@ function generateClientSideAiFallback() {
   };
 }
 
+function cleanThaiText(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/排水/g, '')
+    .replace(/[\u4e00-\u9fa5]/g, '') // ลบตัวอักษรจีนที่อาจหลุดมา
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function renderAiAnalysis(data) {
   if (!data) return;
 
@@ -3327,11 +3336,11 @@ function renderAiAnalysis(data) {
     headerRiskBadge.classList.remove('hidden');
   }
 
-  const headline = data.headline || data.summary || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา';
-  const analysis = data.analysis || data.summary || 'ระดับน้ำอยู่ในเกณฑ์ปกติ การไหลเวียนของน้ำเป็นไปตามแผนการระบายน้ำ';
-  const actionAdvice = data.action_advice || data.advisory || 'ติดตามสถานการณ์และตรวจสอบระบบระบายน้ำรอบที่อยู่อาศัย';
-  const trend6h = data.trend_6h || data.trendPrediction || 'ระดับน้ำทรงตัวในเกณฑ์ปกติ';
-  const officialContext = data.official_context || data.sourceNews || '';
+  const headline = cleanThaiText(data.headline || data.summary || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา');
+  const analysis = cleanThaiText(data.analysis || data.summary || 'ระดับน้ำอยู่ในเกณฑ์ปกติ การไหลเวียนของน้ำเป็นไปตามแผนการระบายน้ำ');
+  const actionAdvice = cleanThaiText(data.action_advice || data.advisory || 'ติดตามสถานการณ์และตรวจสอบระบบระบายน้ำรอบที่อยู่อาศัย');
+  const trend6h = cleanThaiText(data.trend_6h || data.trendPrediction || 'ระดับน้ำทรงตัวในเกณฑ์ปกติ');
+  const officialContext = cleanThaiText(data.official_context || data.sourceNews || '');
 
   const html = `
     <!-- 1. Headline Summary Banner -->

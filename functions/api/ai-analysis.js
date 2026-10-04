@@ -21,6 +21,18 @@ const STATIONS_INFO_BASELINE = [
 ];
 
 /**
+ * Sanitize and clean Thai text, removing unwanted Chinese/CJK characters (e.g. 排水)
+ */
+function cleanThaiText(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .replace(/排水/g, '')
+    .replace(/[\u4e00-\u9fa5]/g, '') // ลบตัวอักษรจีนที่อาจหลุดมา
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
  * Intelligent Rule-Based Hydrological Fallback Engine
  * Generates accurate hydrological analysis based on real water telemetry.
  */
@@ -180,7 +192,10 @@ ${JSON.stringify({
   critical_or_overflow_count: criticalOrOverflow.length,
   critical_or_overflow_stations: criticalOrOverflow.map(s => `${s.stCode} ${s.name}`)
 }, null, 2)}
-วิเคราะห์ความเสี่ยงและส่งผลลัพธ์เป็น JSON ภาษาไทย (headline, analysis, trend_6h, action_advice) ตามโครงสร้างนี้:
+
+ข้อบังคับสำคัญ: ต้องตอบเป็นภาษาไทยล้วน 100% เท่านั้น ห้ามมีภาษาจีน ตัวอักษรจีน (เช่น 排水) หรือภาษาอื่นปนในเนื้อหาโดยเด็ดขาด สำหรับคำว่าการระบายน้ำ ให้ใช้คำภาษาไทยว่า 'การระบายน้ำ' เสมอ
+
+วิเคราะห์ความเสี่ยงและส่งผลลัพธ์เป็น JSON ภาษาไทย (headline, analysis, trend_6h, action_advice, official_context) ตามโครงสร้างนี้:
 {
   "risk_level": "normal" | "warning" | "danger",
   "headline": "หัวข้อสรุปสั้นกระชับ ไม่เกิน 15 คำ",
@@ -280,6 +295,12 @@ ${JSON.stringify({
       risk = 'warning';
     }
 
+    const headlineClean = cleanThaiText(parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา');
+    const analysisClean = cleanThaiText(parsed.analysis || '');
+    const trendClean = cleanThaiText(parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ');
+    const adviceClean = cleanThaiText(parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง');
+    const contextClean = cleanThaiText(parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ');
+
     const aiResult = {
       success: true,
       apiError: null,
@@ -287,19 +308,19 @@ ${JSON.stringify({
       modelUsed: "gemini-3.5-flash-lite",
       source: "gemini-3.5-flash-lite",
       risk_level: risk,
-      headline: parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา',
-      analysis: parsed.analysis || '',
-      trend_6h: parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ',
-      action_advice: parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง',
-      official_context: parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ',
+      headline: headlineClean,
+      analysis: analysisClean,
+      trend_6h: trendClean,
+      action_advice: adviceClean,
+      official_context: contextClean,
       analyzedAt,
       // Aliases for backward compatibility
       riskLevel: risk === 'danger' ? 'วิกฤติ' : (risk === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
       riskColor: risk === 'danger' ? 'red' : (risk === 'warning' ? 'amber' : 'emerald'),
-      summary: parsed.analysis || '',
-      trendPrediction: parsed.trend_6h || '',
-      sourceNews: parsed.official_context || '',
-      advisory: parsed.action_advice || '',
+      summary: analysisClean,
+      trendPrediction: trendClean,
+      sourceNews: contextClean,
+      advisory: adviceClean,
       generatedAt: new Date().toISOString()
     };
 
