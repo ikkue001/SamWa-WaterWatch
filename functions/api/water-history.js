@@ -287,7 +287,7 @@ function sampleHourlyRows(rows, meta, now = new Date()) {
   if (netChange >= 0.05) trend = 'rising';
   else if (netChange <= -0.05) trend = 'falling';
 
-  return {
+  const response = {
     stationId: meta.stCode,
     id: meta.id,
     stCode: meta.stCode,
@@ -295,6 +295,7 @@ function sampleHourlyRows(rows, meta, now = new Date()) {
     canal: meta.canal,
     unit: 'ม.รทก.',
     source: meta.source,
+    isWaterGate: meta.isGate === true,
     criticalThreshold: meta.criticalLevel,
     overflowThreshold: meta.bankLevel,
     criticalLevel: meta.criticalLevel,
@@ -310,6 +311,89 @@ function sampleHourlyRows(rows, meta, now = new Date()) {
       max: maxLevel,
       avg: avgLevel,
       change24h: netChange >= 0 ? `+${netChange.toFixed(2)}` : `${netChange.toFixed(2)}`
+    }
+  };
+
+  return response;
+}
+
+function sampleHourlyGateRows(rows, meta, now = new Date()) {
+  if (!rows || rows.length === 0) {
+    throw new Error(`No telemetry rows for ${meta.stCode}`);
+  }
+
+  rows.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const timestamps = [];
+  const timeLabels = [];
+  const waterLevelsIn = [];
+  const waterLevelsOut = [];
+
+  for (let i = 24; i >= 0; i--) {
+    const targetMs = now.getTime() - i * 3600 * 1000;
+    let closest = null;
+    let minDiff = Infinity;
+    for (const row of rows) {
+      const diff = Math.abs(row.date.getTime() - targetMs);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = row;
+      }
+    }
+    if (closest) {
+      timestamps.push(closest.date.toISOString());
+      timeLabels.push(formatThaiTimeLabel(closest.date));
+      waterLevelsIn.push(closest.valIn);
+      waterLevelsOut.push(closest.valOut);
+    }
+  }
+
+  const latestRow = rows[rows.length - 1];
+  if (latestRow && waterLevelsIn.length > 0) {
+    const lastIndex = waterLevelsIn.length - 1;
+    timestamps[lastIndex] = latestRow.date.toISOString();
+    timeLabels[lastIndex] = formatThaiTimeLabel(latestRow.date);
+    waterLevelsIn[lastIndex] = latestRow.valIn;
+    waterLevelsOut[lastIndex] = latestRow.valOut;
+  }
+
+  const currentLevelIn = waterLevelsIn[waterLevelsIn.length - 1];
+  const currentLevelOut = waterLevelsOut[waterLevelsOut.length - 1];
+  const changeIn = currentLevelIn - waterLevelsIn[0];
+  const changeOut = currentLevelOut - waterLevelsOut[0];
+
+  return {
+    stationId: meta.stCode,
+    id: meta.id,
+    stCode: meta.stCode,
+    name: meta.name,
+    canal: meta.canal,
+    unit: 'ม.รทก.',
+    source: meta.source,
+    isWaterGate: true,
+    criticalThreshold: meta.criticalLevel,
+    overflowThreshold: meta.bankLevel,
+    criticalLevel: meta.criticalLevel,
+    bankLevel: meta.bankLevel,
+    currentLevel: currentLevelOut,
+    currentLevelIn,
+    currentLevelOut,
+    isEstimated: false,
+    trend: Math.abs(changeIn) >= 0.05 ? (changeIn > 0 ? 'rising' : 'falling') : 'stable',
+    timestamps,
+    timeLabels,
+    waterLevels: waterLevelsOut,
+    waterLevelsIn,
+    waterLevelsOut,
+    headDifference: parseFloat((currentLevelIn - currentLevelOut).toFixed(2)),
+    stats: {
+      min: parseFloat(Math.min(...waterLevelsOut).toFixed(2)),
+      max: parseFloat(Math.max(...waterLevelsOut).toFixed(2)),
+      avg: parseFloat((waterLevelsOut.reduce((a, b) => a + b, 0) / waterLevelsOut.length).toFixed(2)),
+      change24h: changeOut >= 0 ? `+${changeOut.toFixed(2)}` : changeOut.toFixed(2),
+      minIn: parseFloat(Math.min(...waterLevelsIn).toFixed(2)),
+      maxIn: parseFloat(Math.max(...waterLevelsIn).toFixed(2)),
+      avgIn: parseFloat((waterLevelsIn.reduce((a, b) => a + b, 0) / waterLevelsIn.length).toFixed(2)),
+      change24hIn: changeIn >= 0 ? `+${changeIn.toFixed(2)}` : changeIn.toFixed(2)
     }
   };
 }
@@ -364,7 +448,7 @@ async function fetchRealBmaWaterflowHistory(meta, now = new Date()) {
   const url = `https://bmawaterflow.bangkok.go.th/API/DataTransections/Stations/${meta.uuid}?datestart=${startStr}&datestop=${stopStr}`;
   const response = await fetch(url, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       ...COMMON_HEADERS,
       'Referer': 'https://bmawaterflow.bangkok.go.th/map'
     }
@@ -418,18 +502,25 @@ async function fetchRealBmaWeatherHistory(bmaId, meta, now = new Date()) {
 
   const html = await response.text();
   const trMatches = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-  const isGate = (bmaId === 21);
+  const isGate = meta.isGate === true || bmaId === 21;
   const rows = [];
 
   for (const tr of trMatches) {
     const cells = [...tr[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
     if (cells.length >= (isGate ? 4 : 3)) {
       const timeStr = cells[1];
-      const val = parseFloat(isGate ? cells[3] : cells[2]);
-      if (timeStr && !isNaN(val) && val > -50 && val < 50) {
+      const valIn = parseFloat(cells[2]);
+      const valOut = parseFloat(isGate ? cells[3] : cells[2]);
+      if (timeStr && !isNaN(valIn) && valIn > -50 && valIn < 50 &&
+          !isNaN(valOut) && valOut > -50 && valOut < 50) {
         const dateObj = parseThaiDate(timeStr);
         if (dateObj && !isNaN(dateObj.getTime())) {
-          rows.push({ date: dateObj, val: parseFloat(val.toFixed(2)) });
+          rows.push({
+            date: dateObj,
+            val: parseFloat(valOut.toFixed(2)),
+            valIn: parseFloat(valIn.toFixed(2)),
+            valOut: parseFloat(valOut.toFixed(2))
+          });
         }
       }
     }
@@ -439,7 +530,10 @@ async function fetchRealBmaWeatherHistory(bmaId, meta, now = new Date()) {
     throw new Error(`No telemetry rows parsed from BMA Weather ID ${bmaId}`);
   }
 
-  const result = sampleHourlyRows(rows, meta, now);
+  const result = isGate
+    ? sampleHourlyGateRows(rows, meta, now)
+    : sampleHourlyRows(rows, meta, now);
+  result.isWaterGate = isGate;
   GLOBAL_HISTORY_CACHE.set(meta.id, result);
   return result;
 }
@@ -476,7 +570,7 @@ function createSafeBaselineHistory(meta, now = new Date()) {
     waterLevels.push(baseLvl);
   }
 
-  return {
+  const response = {
     stationId: meta.stCode,
     id: meta.id,
     stCode: meta.stCode,
@@ -484,6 +578,7 @@ function createSafeBaselineHistory(meta, now = new Date()) {
     canal: meta.canal,
     unit: 'ม.รทก.',
     source: meta.source,
+    isWaterGate: meta.isGate === true,
     criticalThreshold: meta.criticalLevel,
     overflowThreshold: meta.bankLevel,
     criticalLevel: meta.criticalLevel,
@@ -501,6 +596,21 @@ function createSafeBaselineHistory(meta, now = new Date()) {
       change24h: '+0.00'
     }
   };
+
+  if (meta.isGate) {
+    const insideLevel = 0.93;
+    response.currentLevelIn = insideLevel;
+    response.currentLevelOut = baseLvl;
+    response.waterLevelsIn = waterLevels.map(() => insideLevel);
+    response.waterLevelsOut = waterLevels.slice();
+    response.headDifference = parseFloat((insideLevel - baseLvl).toFixed(2));
+    response.stats.minIn = insideLevel;
+    response.stats.maxIn = insideLevel;
+    response.stats.avgIn = insideLevel;
+    response.stats.change24hIn = '+0.00';
+  }
+
+  return response;
 }
 
 export async function onRequest(context) {

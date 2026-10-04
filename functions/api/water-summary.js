@@ -393,7 +393,7 @@ async function fetchBmaWaterflow(configs) {
       try {
         const res = await fetch(`https://bmawaterflow.bangkok.go.th/API/Stations/${cfg.uuid}`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             ...COMMON_HEADERS,
             'Referer': 'https://bmawaterflow.bangkok.go.th/map'
           }

@@ -1257,9 +1257,24 @@ function getPopupHistoryValues(station) {
   return Array.from({ length: 12 }, (_, index) => current - direction * (11 - index) * 0.01);
 }
 
+function getPopupHistorySeries(station) {
+  const inside = Array.isArray(station.waterLevelsIn)
+    ? station.waterLevelsIn.map(Number).filter(Number.isFinite).slice(-24)
+    : [];
+  const outside = Array.isArray(station.waterLevelsOut)
+    ? station.waterLevelsOut.map(Number).filter(Number.isFinite).slice(-24)
+    : [];
+  if (inside.length > 1 && outside.length > 1) return { inside, outside };
+  const values = getPopupHistoryValues(station);
+  return values.length > 1 ? { outside: values } : { outside: [] };
+}
+
 function drawStationPopupSparkline(station, values = getPopupHistoryValues(station)) {
   const canvas = document.getElementById(`popup-chart-${station.id}`);
-  if (!canvas || !values || values.length < 2) return;
+  const series = Array.isArray(values) ? { outside: values } : values;
+  const insideValues = series.inside || [];
+  const outsideValues = series.outside || [];
+  if (!canvas || outsideValues.length < 2) return;
 
   const width = Math.max(canvas.clientWidth || 250, 180);
   const height = 55;
@@ -1273,12 +1288,13 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   ctx.clearRect(0, 0, width, height);
 
   const padding = { top: 5, right: 3, bottom: 5, left: 3 };
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
+  const allValues = [...insideValues, ...outsideValues];
+  const rawMin = Math.min(...allValues);
+  const rawMax = Math.max(...allValues);
   const min = rawMin - 0.15;
   const max = rawMax + 0.15;
   const range = Math.max(max - min, 0.02);
-  const xStep = (width - padding.left - padding.right) / (values.length - 1);
+  const xStep = (width - padding.left - padding.right) / (outsideValues.length - 1);
   const y = value => padding.top + (1 - ((value - min) / range)) * (height - padding.top - padding.bottom);
 
   const critical = Number(station.criticalLevel);
@@ -1293,25 +1309,31 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
     ctx.setLineDash([]);
   }
 
-  ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  const points = values.map((value, index) => ({
-    x: padding.left + index * xStep,
-    y: y(value)
-  }));
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let index = 1; index < points.length - 1; index++) {
-    const midpointX = (points[index].x + points[index + 1].x) / 2;
-    const midpointY = (points[index].y + points[index + 1].y) / 2;
-    ctx.quadraticCurveTo(points[index].x, points[index].y, midpointX, midpointY);
-  }
-  const lastPoint = points[points.length - 1];
-  const previousPoint = points[points.length - 2];
-  ctx.quadraticCurveTo(previousPoint.x, previousPoint.y, lastPoint.x, lastPoint.y);
-  ctx.stroke();
+  const drawLine = (lineValues, color) => {
+    if (lineValues.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const points = lineValues.map((value, index) => ({
+      x: padding.left + index * xStep,
+      y: y(value)
+    }));
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let index = 1; index < points.length - 1; index++) {
+      const midpointX = (points[index].x + points[index + 1].x) / 2;
+      const midpointY = (points[index].y + points[index + 1].y) / 2;
+      ctx.quadraticCurveTo(points[index].x, points[index].y, midpointX, midpointY);
+    }
+    const lastPoint = points[points.length - 1];
+    const previousPoint = points[points.length - 2];
+    ctx.quadraticCurveTo(previousPoint.x, previousPoint.y, lastPoint.x, lastPoint.y);
+    ctx.stroke();
+  };
+
+  drawLine(insideValues, 'rgba(56, 189, 248, 1)');
+  drawLine(outsideValues, 'rgba(192, 132, 252, 0.9)');
 }
 
 async function renderStationPopupSparkline(station) {
@@ -1319,7 +1341,7 @@ async function renderStationPopupSparkline(station) {
   drawStationPopupSparkline(station, fallbackValues);
   const trendElement = document.getElementById(`popup-trend-${station.id}`);
   const applyTrend = values => {
-    const trend = getUnifiedWaterTrend(values);
+    const trend = getUnifiedWaterTrend(Array.isArray(values) ? values : (values.inside || values.outside));
     if (trendElement) {
       trendElement.className = `${trend.color} font-semibold`;
       trendElement.textContent = `${trend.icon} ${trend.text}`;
@@ -1337,11 +1359,13 @@ async function renderStationPopupSparkline(station) {
     const response = await fetch(`/api/water-history?station=${encodeURIComponent(station.id)}`, { cache: 'no-store' });
     if (!response.ok) return;
     const data = await response.json();
-    const values = (data.selectedStation?.waterLevels || data.waterLevels || [])
-      .map(value => Number(value))
-      .filter(Number.isFinite)
-      .slice(-24);
-    if (values.length > 1) {
+    const selected = data.selectedStation || data;
+    const values = {
+      inside: (selected.waterLevelsIn || []).map(Number).filter(Number.isFinite).slice(-24),
+      outside: (selected.waterLevelsOut || selected.waterLevels || [])
+        .map(Number).filter(Number.isFinite).slice(-24)
+    };
+    if (values.outside.length > 1) {
       popupHistoryCache.set(station.id, values);
       drawStationPopupSparkline(station, values);
       applyTrend(values);
@@ -1583,6 +1607,12 @@ function updateMapMarkers() {
           <div>
             <b id="popup-trend-${station.id}" class="${popupTrend.color} font-semibold">${popupTrend.icon} ${popupTrend.text}</b>
             <canvas id="${popupChartId}" height="55" class="w-full mt-1"></canvas>
+            ${station.isGate ? `
+              <div class="flex items-center justify-center gap-2 text-[9px] text-slate-300 mt-1">
+                <span class="text-sky-300">━ ใน: ${station.inside?.level != null ? station.inside.level.toFixed(2) : '--'} ม.</span>
+                <span class="text-purple-300">━ นอก: ${station.outside?.level != null ? station.outside.level.toFixed(2) : '--'} ม.</span>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -4336,6 +4366,17 @@ function renderWaterHistoryChart(stationId, liveData) {
     renderChartFallbackMessage();
     return;
   }
+  const isWaterGate = st.isWaterGate === true ||
+    (Array.isArray(st.waterLevelsOut) && st.waterLevelsOut.length > 0);
+  const waterLevelsOut = (isWaterGate ? st.waterLevelsOut : st.waterLevels)
+    .map(Number).filter(Number.isFinite);
+  const waterLevelsIn = isWaterGate && Array.isArray(st.waterLevelsIn)
+    ? st.waterLevelsIn.map(Number).filter(Number.isFinite)
+    : [];
+  if (isWaterGate && waterLevelsOut.length > 0) {
+    st.waterLevels = waterLevelsOut;
+    st.waterLevelsOut = waterLevelsOut;
+  }
   clearChartFallbackMessage();
   if (!Array.isArray(st.timeLabels) || st.timeLabels.length !== st.waterLevels.length) {
     st.timeLabels = st.waterLevels.map((_, index) => `${index + 1}:00`);
@@ -4367,6 +4408,10 @@ function renderWaterHistoryChart(stationId, liveData) {
     st.currentLevel = cardWaterLevel;
     if (st.waterLevels && st.waterLevels.length > 0) {
       st.waterLevels[st.waterLevels.length - 1] = cardWaterLevel;
+    }
+    if (isWaterGate && st.waterLevelsOut?.length > 0) {
+      st.currentLevelOut = cardWaterLevel;
+      st.waterLevelsOut[st.waterLevelsOut.length - 1] = cardWaterLevel;
     }
 
     const historyLevels = st.waterLevels
@@ -4424,6 +4469,14 @@ function renderWaterHistoryChart(stationId, liveData) {
   st.criticalThreshold = st.criticalLevel;
   st.overflowThreshold = st.bankLevel;
 
+  const latestIn = waterLevelsIn[waterLevelsIn.length - 1];
+  const latestOut = waterLevelsOut[waterLevelsOut.length - 1];
+  if (isWaterGate && Number.isFinite(latestIn) && Number.isFinite(latestOut)) {
+    st.currentLevelIn = Number(st.currentLevelIn ?? latestIn);
+    st.currentLevelOut = Number(st.currentLevelOut ?? latestOut);
+    st.headDifference = parseFloat((st.currentLevelIn - st.currentLevelOut).toFixed(2));
+  }
+
   // Update Section Badges
   const badge = document.getElementById('chartStationBadge');
   if (badge) badge.textContent = `${st.stCode || stationId}: ${st.name}`;
@@ -4456,15 +4509,35 @@ function renderWaterHistoryChart(stationId, liveData) {
   const statMax = document.getElementById('chartStatMax');
   const statMin = document.getElementById('chartStatMin');
   const statChg = document.getElementById('chartStatChange');
+  const statChgLabel = document.getElementById('chartStatChangeLabel');
 
   const currVal = (typeof st.currentLevel === 'number')
     ? st.currentLevel.toFixed(2)
     : (st.waterLevels && st.waterLevels.length > 0 ? Number(st.waterLevels[st.waterLevels.length - 1]).toFixed(2) : '--');
 
-  if (statCurr) statCurr.textContent = currVal;
+  if (statCurr) {
+    statCurr.textContent = isWaterGate
+      ? `ใน: ${Number(st.currentLevelIn ?? latestIn).toFixed(2)} / นอก: ${Number(st.currentLevelOut ?? latestOut).toFixed(2)}`
+      : currVal;
+  }
   if (statMax) statMax.textContent = (st.stats && typeof st.stats.max === 'number') ? st.stats.max.toFixed(2) : '--';
   if (statMin) statMin.textContent = (st.stats && typeof st.stats.min === 'number') ? st.stats.min.toFixed(2) : '--';
   if (statChg) statChg.textContent = st.stats?.change24h || '--';
+  if (statChgLabel) statChgLabel.textContent = isWaterGate ? 'ส่วนต่างระดับน้ำ (ใน - นอก)' : 'เปลี่ยนแปลง 24 ชม.';
+  const currentLabel = statCurr?.parentElement?.parentElement?.querySelector('span.text-\\[10px\\]');
+  if (currentLabel) currentLabel.textContent = isWaterGate ? 'ระดับล่าสุด (ม.รทก.)' : 'ระดับล่าสุด';
+  if (isWaterGate && statChg) {
+    const diff = Number(st.headDifference);
+    statChg.textContent = Number.isFinite(diff)
+      ? `Δ ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}`
+      : '--';
+  }
+  const insideLegend = document.getElementById('chartInsideLegend');
+  const outsideLegend = document.getElementById('chartOutsideLegend');
+  const levelLegend = document.getElementById('chartLevelLegend');
+  if (insideLegend) insideLegend.classList.toggle('hidden', !isWaterGate);
+  if (outsideLegend) outsideLegend.classList.toggle('hidden', !isWaterGate);
+  if (levelLegend) levelLegend.classList.toggle('hidden', isWaterGate);
   bindChartQuickActions();
 
   // Check Chart.js availability
@@ -4494,19 +4567,33 @@ function renderWaterHistoryChart(stationId, liveData) {
       labels: st.timeLabels,
       datasets: [
         {
-          label: 'ระดับน้ำ (ม.รทก.)',
-          data: st.waterLevels,
+          label: isWaterGate ? 'ระดับน้ำด้านใน (ม.รทก.)' : 'ระดับน้ำ (ม.รทก.)',
+          data: isWaterGate ? waterLevelsIn : st.waterLevels,
           borderColor: '#38bdf8',
           borderWidth: 2.5,
-          backgroundColor: gradient,
-          fill: true,
+          backgroundColor: isWaterGate ? 'transparent' : gradient,
+          fill: !isWaterGate,
           tension: 0.35,
           pointRadius: 2.5,
           pointHoverRadius: 6,
-          pointBackgroundColor: '#0284c7',
+          pointBackgroundColor: '#38bdf8',
           pointBorderColor: '#bae6fd',
           pointBorderWidth: 1.5
         },
+        ...(isWaterGate ? [{
+          label: 'ระดับน้ำด้านนอก (ม.รทก.)',
+          data: waterLevelsOut,
+          borderColor: '#c084fc',
+          borderWidth: 2.5,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.35,
+          pointRadius: 2.5,
+          pointHoverRadius: 6,
+          pointBackgroundColor: '#c084fc',
+          pointBorderColor: '#f3e8ff',
+          pointBorderWidth: 1.5
+        }] : []),
         {
           label: `เกณฑ์วิกฤติ (${criticalVal.toFixed(2)} ม.)`,
           data: criticalArr,
@@ -4538,7 +4625,9 @@ function renderWaterHistoryChart(stationId, liveData) {
       },
       plugins: {
         legend: {
-          display: false
+          display: isWaterGate,
+          position: 'bottom',
+          labels: { usePointStyle: true, color: '#cbd5e1', padding: 12 }
         },
         tooltip: {
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
@@ -4552,6 +4641,15 @@ function renderWaterHistoryChart(stationId, liveData) {
           callbacks: {
             label: function(context) {
               const val = context.parsed.y;
+              if (isWaterGate && (context.datasetIndex === 0 || context.datasetIndex === 1)) {
+                const index = context.dataIndex;
+                const inside = Number(waterLevelsIn[index]);
+                const outside = Number(waterLevelsOut[index]);
+                const difference = inside - outside;
+                return context.datasetIndex === 0
+                  ? ` ใน: ${inside.toFixed(2)} ม.รทก.`
+                  : ` นอก: ${outside.toFixed(2)} ม.รทก. | Δ ใน-นอก: ${difference >= 0 ? '+' : ''}${difference.toFixed(2)} ม.`;
+              }
               if (context.datasetIndex === 0) {
                 const diffCrit = (val - criticalVal).toFixed(2);
                 const diffStr = diffCrit >= 0 ? ` (+${diffCrit} ม. เหนือวิกฤติ)` : ` (${diffCrit} ม. ถึงวิกฤติ)`;
