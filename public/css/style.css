@@ -610,7 +610,10 @@ body.emergency-active {
   opacity: 0.88;
 }
 
-.station-stale .water-gauge-container {
+.station-stale .water-gauge-container,
+.station-stale [data-station-fill],
+.station-stale [data-station-inside-fill],
+.station-stale [data-station-outside-fill] {
   opacity: 0.72;
   filter: saturate(0.65);
 }
