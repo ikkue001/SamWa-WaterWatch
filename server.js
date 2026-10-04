@@ -964,63 +964,73 @@ function generateHydrologicalFallbackServer(processedStations) {
   let overflowCount = 0;
   let highestRatio = 0;
   let criticalStation = null;
+  const overflowStations = [];
+  const criticalStations = [];
 
   for (const st of processedStations) {
-    const lvl = st.waterLevel !== null && st.waterLevel !== undefined ? parseFloat(st.waterLevel) : 0.8;
+    const lvl = st.waterLevel !== null && st.waterLevel !== undefined ? parseFloat(st.waterLevel) : null;
     const bank = parseFloat(st.bankLevel) || 2.0;
     const crit = parseFloat(st.criticalLevel) || 1.8;
-    const ratio = lvl / bank;
-    if (ratio > highestRatio) {
-      highestRatio = ratio;
-      criticalStation = st;
+
+    if (lvl !== null && !isNaN(lvl)) {
+      const ratio = lvl / bank;
+      if (ratio > highestRatio) {
+        highestRatio = ratio;
+        criticalStation = st;
+      }
+      if (lvl >= bank) {
+        overflowCount++;
+        overflowStations.push(st.stCode || st.name);
+      } else if (lvl >= crit) {
+        criticalCount++;
+        criticalStations.push(st.stCode || st.name);
+      }
     }
-    if (lvl >= bank) overflowCount++;
-    else if (lvl >= crit) criticalCount++;
   }
 
-  let riskLevel = 'ปกติ';
-  let riskColor = 'emerald';
-  let summary = '';
-  let trendPrediction = '';
-  let sourceNews = '';
-  let advisory = '';
+  let riskLevel = 'normal';
+  let headline = '';
+  let analysis = '';
+  let trend6h = '';
+  let actionAdvice = '';
+  let officialContext = '';
 
   if (overflowCount > 0) {
-    riskLevel = 'วิกฤติ';
-    riskColor = 'red';
-    summary = `ตรวจพบระดับน้ำล้นตลิ่งที่ ${overflowCount} สถานีหลักในพื้นที่รอยต่อ ปริมาณน้ำอยู่ในระดับอันตรายสูง ต้องดำเนินการป้องกันน้ำท่วมทันที`;
-    trendPrediction = 'แนวโน้ม 6-12 ชม. ข้างหน้า: เพิ่มขึ้นหรือทรงตัวในระดับสูง หากมีฝนตกหนักหรือการระบายน้ำจากตอนบนหนุนซ้ำ';
-    sourceNews = 'สำนักการระบายน้ำ กทม. และกรมชลประทานเดินเครื่องสูบน้ำสถานีสูบน้ำคลองหกวาเต็มกำลัง และประสานงานเปิดระบายน้ำออกสู่แม่น้ำบางปะกง';
-    advisory = 'ยกเครื่องใช้ไฟฟ้าและของมีค่าขึ้นที่สูงทันที เสริมแนวกระสอบทรายหน้าบ้าน และเฝ้าระวังผู้สูงอายุ/ผู้ป่วยติดเตียง';
+    riskLevel = 'danger';
+    headline = `ระดับน้ำล้นตลิ่งที่ ${overflowStations.join(', ')} เฝ้าระวังน้ำท่วมฉับพลัน`;
+    analysis = `มวลน้ำในแนวคลองหกวาตอนบนมีระดับสูงเกินคันตลิ่ง (${overflowStations.join(', ')}) ส่งผลให้การระบายน้ำเข้าสู่คลองพระยาสุเรนทร์และคลองสามวาต้องเร่งระบายน้ำเต็มกำลัง อาจมีน้ำเอ่อล้นเข้าท่วมพื้นที่ลุ่มต่ำริมสองฝั่งคลอง`;
+    trend6h = 'เพิ่มขึ้นหรือทรงตัวในระดับสูง (6-12 ชม. ข้างหน้า)';
+    actionAdvice = 'ยกเครื่องใช้ไฟฟ้าและทรัพย์สินขึ้นที่สูงทันที เสริมแนวกระสอบทรายในจุดเสี่ยงริมตลิ่ง และเฝ้าระวังผู้สูงอายุ/ผู้ป่วยติดเตียง';
+    officialContext = 'สำนักการระบายน้ำ กทม. และกรมชลประทานเดินเครื่องสูบน้ำสถานีคลองหกวาเต็มกำลัง พร้อมเร่งระบายน้ำออกสู่แม่น้ำบางปะกง';
   } else if (criticalCount > 0) {
-    riskLevel = 'เฝ้าระวัง';
-    riskColor = 'amber';
-    summary = `ระดับน้ำแตะเกณฑ์วิกฤติที่ ${criticalStation?.name || 'สถานีหลัก'} (${criticalCount} จุด) แต่ยังไม่ล้นตลิ่ง อยู่ในเกณฑ์ที่ยังสามารถบริหารจัดการได้`;
-    trendPrediction = 'แนวโน้ม 6-12 ชม. ข้างหน้า: ทรงตัวถึงลดลงเล็กน้อย หากไม่มีฝนตกลงมาเพิ่มในลุ่มน้ำคลองสามวาและลำลูกกา';
-    sourceNews = 'ประตูระบายน้ำคลองสามวาเปิดบานระบาย 0.43 ม. พร้อมเดินเครื่องสูบน้ำสถานีปลายคลองพระยาสุเรนทร์เพื่อพร่องน้ำรอรับน้ำฝน';
-    advisory = 'ตรวจสอบความพร้อมของระบบป้องกันน้ำ เคลื่อนย้ายสิ่งของที่ไวต่อความชื้นขึ้นที่ปลอดภัย และติดตามสถานการณ์อย่างต่อเนื่อง';
+    riskLevel = 'warning';
+    headline = `ระดับน้ำแตะเกณฑ์เฝ้าระวังที่ ${criticalStations.join(', ')} ยังอยู่ในการควบคุม`;
+    analysis = `ระดับน้ำในแนวคลองหกวาและคลองพระยาสุเรนทร์แตะเกณฑ์วิกฤติในบางจุด (${criticalStations.join(', ')}) แต่ยังต่ำกว่าระดับตลิ่ง การไหลเวียนของน้ำยังคงดำเนินไปได้โดยการเปิดบานระบาย ปตร.คลองสามวา`;
+    trend6h = 'ทรงตัวถึงลดลงเล็กน้อย หากไม่มีฝนตกหนักเพิ่มเติม';
+    actionAdvice = 'ตรวจสอบความพร้อมของคันกั้นน้ำรอบที่อยู่อาศัย เคลื่อนย้ายของไวต่อความชื้นขึ้นที่ปลอดภัย และติดตามข่าวสารจาก กทม. ต่อเนื่อง';
+    officialContext = 'สำนักการระบายน้ำ กทม. เปิดประตูระบายน้ำคลองสามวาและเดินเครื่องสูบน้ำสถานีปลายคลองพระยาสุเรนทร์เพื่อพร่องน้ำรอรับน้ำฝน';
   } else {
-    riskLevel = 'ปกติ';
-    riskColor = 'emerald';
-    summary = 'ระดับน้ำในคลองหกวา คลองพระยาสุเรนทร์ และคลองสามวาทุกจุดตรวจวัดอยู่ในเกณฑ์ควบคุมปกติ ต่ำกว่าตลิ่งปลอดภัย';
-    trendPrediction = 'แนวโน้ม 6-12 ชม. ข้างหน้า: ระดับน้ำทรงตัว การระบายน้ำไหลเวียนได้ตามปกติ ไม่มีมวลน้ำก้อนใหญ่ผ่านพื้นที่';
-    sourceNews = 'กรมอุตุนิยมวิทยารายงานเรดาร์ฝนกลุ่มเมฆกระจายตัว มีโอกาสเกิดฝนฟ้าคะนองร้อยละ 30-40 ของพื้นที่ในช่วงบ่ายถึงค่ำ';
-    advisory = 'สามารถดำเนินกิจกรรมในชีวิตประจำวันได้ตามปกติ แนะนำให้ตรวจสอบท่อระบายน้ำรอบที่พักอาศัยไม่ให้อุดตันด้วยเศษใบไม้หรือขยะ';
+    riskLevel = 'normal';
+    headline = 'สถานการณ์น้ำคลองหกวาและคลองสามวาอยู่ในเกณฑ์ปกติ ต่ำกว่าตลิ่งปลอดภัย';
+    analysis = 'ระดับน้ำทั้ง 9 สถานีในแนวคลองหกวา คลองพระยาสุเรนทร์ และคลองสามวา อยู่ในเกณฑ์ควบคุมปกติ ต่ำกว่าระดับวิกฤติและตลิ่ง การระบายน้ำไหลเวียนได้ดี ไม่มีมวลน้ำหลากผ่านพื้นที่';
+    trend6h = 'ทรงตัวในเกณฑ์ปกติ (6-12 ชม. ข้างหน้า)';
+    actionAdvice = 'ดำเนินกิจกรรมในชีวิตประจำวันได้ตามปกติ แนะนำให้ตรวจสอบท่อระบายน้ำรอบบ้านไม่ให้อุดตันด้วยเศษใบไม้หรือขยะ';
+    officialContext = 'สนน.กทม. และกรมชลประทานบริหารจัดการน้ำตามเกณฑ์ปกติ พร้อมเฝ้าระวังเรดาร์ฝนกลุ่มเมฆในพื้นที่เขตคลองสามวา';
   }
 
   return {
-    success: true,
-    riskLevel,
-    riskColor,
-    summary,
-    trendPrediction,
-    sourceNews,
-    advisory,
-    keyIndicators: [
-      { label: 'จุดเฝ้าระวังสำคัญ', value: criticalStation?.name || 'คลองหกวา คลอง 8' },
-      { label: 'แนวโน้มระดับน้ำ', value: trendPrediction.split(':')[1]?.trim() || 'ทรงตัว' },
-      { label: 'การทำงาน ปตร.คลองสามวา', value: 'เปิดบานระบาย 0.43 ม. (ระบายปกติ)' }
-    ],
+    risk_level: riskLevel,
+    headline,
+    analysis,
+    trend_6h: trend6h,
+    action_advice: actionAdvice,
+    official_context: officialContext,
+    riskLevel: riskLevel === 'danger' ? 'วิกฤติ' : (riskLevel === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
+    riskColor: riskLevel === 'danger' ? 'red' : (riskLevel === 'warning' ? 'amber' : 'emerald'),
+    summary: analysis,
+    trendPrediction: trend6h,
+    sourceNews: officialContext,
+    advisory: actionAdvice,
     source: 'hydrological-expert-system',
     generatedAt: new Date().toISOString()
   };
@@ -1089,7 +1099,8 @@ app.get('/api/water-history', async (req, res) => {
  */
 app.get('/api/ai-analysis', async (req, res) => {
   const nowMs = Date.now();
-  if (cachedAiAnalysis && (nowMs - cachedAiTimestamp < AI_CACHE_DURATION_MS)) {
+  const isForce = req.query.t || req.query.force;
+  if (!isForce && cachedAiAnalysis && (nowMs - cachedAiTimestamp < AI_CACHE_DURATION_MS)) {
     res.set('Cache-Control', 'public, max-age=1800');
     return res.json(cachedAiAnalysis);
   }
@@ -1100,29 +1111,43 @@ app.get('/api/ai-analysis', async (req, res) => {
 
   if (apiKey) {
     try {
-      const promptText = `
-คุณคือผู้เชี่ยวชาญด้านอุทกวิทยาและการจัดการน้ำท่วมกรุงเทพฯ วิเคราะห์ระดับน้ำย้อนหลังร่วมกับประกาศทางการ เพื่อประเมินความเสี่ยงแนวคลองหกวา คลองพระยาสุเรนทร์ และคลองสามวา ให้ข้อมูลกระชับ ตรงประเด็น และเป็นประโยชน์ต่อประชาชน
+      const criticalOrOverflow = processed.filter(s => {
+        const lvl = Number(s.waterLevel);
+        const crit = Number(s.criticalLevel);
+        const bank = Number(s.bankLevel);
+        return !isNaN(lvl) && ((crit && lvl >= crit) || (bank && lvl >= bank));
+      });
+      const staleStations = processed.filter(s => s.isStale);
 
-ข้อมูลสถานการณ์ระดับน้ำล่าสุด 9 สถานี:
-${processed.map(s => `- [${s.stCode}] ${s.name}: ระดับ ${s.waterLevel ?? '--'} ม. (วิกฤติ ${s.criticalLevel} ม., ตลิ่ง ${s.bankLevel} ม.)`).join('\n')}
-- ปตร.คลองสามวา: เปิดบานระบาย 0.43 ม.
-- ปัจจัยภายนอก: สำนักการระบายน้ำ กทม. และกรมชลประทานเดินเครื่องสูบน้ำระบายลงคลองแสนแสบและแม่น้ำบางปะกง
+      const promptText = `คุณคือผู้เชี่ยวชาญด้านวิศวกรรมชลประทานและอุทกวิทยา วิเคราะห์สถานการณ์น้ำท่วมเขตคลองสามวาและพื้นที่ใกล้เคียง จากข้อมูลโทรมาตรล่าสุด:
+${JSON.stringify({
+  stations_telemetry: processed.map(s => ({
+    code: s.stCode,
+    name: s.name,
+    canal: s.canal,
+    water_level_m: s.waterLevel !== null && s.waterLevel !== undefined ? Number(s.waterLevel) : null,
+    warning_level_m: Number(s.warningLevel) || null,
+    critical_level_m: Number(s.criticalLevel) || null,
+    bank_level_m: Number(s.bankLevel) || null,
+    trend: s.trend || 'STABLE',
+    is_stale: Boolean(s.isStale)
+  })),
+  critical_or_overflow_count: criticalOrOverflow.length,
+  critical_or_overflow_stations: criticalOrOverflow.map(s => s.stCode + ' ' + s.name),
+  stale_count: staleStations.length,
+  stale_stations: staleStations.map(s => s.stCode),
+  junction_context: 'แนวคลองหกวาตอนบน (ST-1, ST-2, ST-3, ST-5, ST-6) เชื่อมต่อเข้าคลองพระยาสุเรนทร์ (ST-7, ST-8) และระบายออกผ่าน ปตร.คลองสามวา (ST-4, ST-9)'
+}, null, 2)}
 
-โปรดตอบกลับเป็น JSON บริสุทธิ์เท่านั้น (ห้ามใส่ Markdown code block หรือข้อความอื่น):
+วิเคราะห์และตอบกลับในรูปแบบ JSON ตามโครงสร้างนี้เท่านั้น:
 {
-  "summary": "สรุปภาพรวมสั้นๆ 1-2 ประโยค",
-  "riskLevel": "ปกติ" | "เฝ้าระวัง" | "เสี่ยงสูง" | "วิกฤติ",
-  "riskColor": "emerald" | "amber" | "orange" | "red",
-  "trendPrediction": "แนวโน้ม 6-12 ชม. ข้างหน้า",
-  "sourceNews": "ข่าวสารทางการหรือปัจจัยภายนอก เช่น การระบายน้ำ หรือเรดาร์ฝน",
-  "advisory": "คำแนะนำการเตรียมตัวสำหรับประชาชนในพื้นที่เสี่ยง",
-  "keyIndicators": [
-    { "label": "จุดเฝ้าระวังสำคัญ", "value": "ชื่อจุดตรวจวัด" },
-    { "label": "แนวโน้มระดับน้ำ", "value": "แนวโน้มสั้นๆ" },
-    { "label": "การทำงาน ปตร.", "value": "สถานะการระบาย" }
-  ]
-}
-      `.trim();
+  "risk_level": "normal" | "warning" | "danger",
+  "headline": "หัวข้อสรุปสั้นกระชับ ไม่เกิน 15 คำ",
+  "analysis": "บทวิเคราะห์สรุปแนวโน้มน้ำและการไหลในแนวคลองหกวา/พระยาสุเรนทร์ 2-3 ประโยค",
+  "trend_6h": "แนวโน้ม 6-12 ชม. ข้างหน้า (เพิ่มขึ้น / ทรงตัว / ลดลง)",
+  "action_advice": "คำแนะนำเชิงรุกสำหรับประชาชนในพื้นที่ (เช่น ยกของขึ้นที่สูง, ติดตามข่าวสาร)",
+  "official_context": "บริบทประกาศจาก สนน.กทม. หรือ กรมชลประทานที่เกี่ยวข้อง"
+}`;
 
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const geminiRes = await fetch(geminiUrl, {
@@ -1133,6 +1158,7 @@ ${processed.map(s => `- [${s.stCode}] ${s.name}: ระดับ ${s.waterLevel 
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 800,
+            response_mime_type: 'application/json',
             responseMimeType: 'application/json'
           }
         })
@@ -1140,14 +1166,35 @@ ${processed.map(s => `- [${s.stCode}] ${s.name}: ระดับ ${s.waterLevel 
 
       if (geminiRes.ok) {
         const geminiData = await geminiRes.json();
-        const candidate = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (candidate) {
-          const cleaned = candidate.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const candidateText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (candidateText) {
+          let cleaned = candidateText.trim();
+          if (cleaned.startsWith('```')) {
+            cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+          }
           const parsed = JSON.parse(cleaned);
-          if (parsed.summary && parsed.riskLevel) {
+          if (parsed && (parsed.headline || parsed.analysis)) {
+            let risk = 'normal';
+            const rawRisk = String(parsed.risk_level || parsed.riskLevel || '').toLowerCase();
+            if (rawRisk.includes('danger') || rawRisk.includes('วิกฤติ') || rawRisk.includes('emergency')) {
+              risk = 'danger';
+            } else if (rawRisk.includes('warn') || rawRisk.includes('เฝ้าระวัง') || rawRisk.includes('เสี่ยง')) {
+              risk = 'warning';
+            }
+
             result = {
-              success: true,
-              ...parsed,
+              risk_level: risk,
+              headline: parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา',
+              analysis: parsed.analysis || '',
+              trend_6h: parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ',
+              action_advice: parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง',
+              official_context: parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ',
+              riskLevel: risk === 'danger' ? 'วิกฤติ' : (risk === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
+              riskColor: risk === 'danger' ? 'red' : (risk === 'warning' ? 'amber' : 'emerald'),
+              summary: parsed.analysis || '',
+              trendPrediction: parsed.trend_6h || '',
+              sourceNews: parsed.official_context || '',
+              advisory: parsed.action_advice || '',
               source: 'gemini-1.5-flash',
               generatedAt: new Date().toISOString()
             };

@@ -1040,3 +1040,5 @@ export async function onRequestOptions() {
     }
   });
 }
+
+export { assembleWaterSummaryData };

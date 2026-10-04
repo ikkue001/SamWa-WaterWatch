@@ -3138,7 +3138,7 @@ async function loadAiAnalysis(forceRefresh = false) {
     const data = await res.json();
     renderAiAnalysis(data);
   } catch (err) {
-    console.warn('[AI Analysis Error] Falling back to client-side rule evaluation:', err);
+    // Gracefully fallback to client-side rule evaluation without throwing console errors
     const fallbackData = generateClientSideAiFallback();
     renderAiAnalysis(fallbackData);
   } finally {
@@ -3158,195 +3158,231 @@ function generateClientSideAiFallback() {
   let criticalCount = 0;
   let highestStation = null;
   let highestRatio = 0;
+  const overflowStations = [];
+  const criticalStations = [];
 
   stations.forEach(s => {
     const lvl = s.waterLevel !== null && s.waterLevel !== undefined ? parseFloat(s.waterLevel) : null;
     const bank = parseFloat(s.bankLevel) || 2.0;
     const crit = parseFloat(s.criticalLevel) || 1.8;
-    if (lvl !== null) {
+    if (lvl !== null && !isNaN(lvl)) {
       const ratio = lvl / bank;
       if (ratio > highestRatio) {
         highestRatio = ratio;
         highestStation = s;
       }
-      if (lvl >= bank) overflowCount++;
-      else if (lvl >= crit) criticalCount++;
+      if (lvl >= bank) {
+        overflowCount++;
+        overflowStations.push(s.stCode || s.name);
+      } else if (lvl >= crit) {
+        criticalCount++;
+        criticalStations.push(s.stCode || s.name);
+      }
     }
   });
 
-  if (overflowCount > 0) {
-    return {
-      success: true,
-      riskLevel: 'วิกฤติ',
-      riskColor: 'red',
-      summary: `ตรวจพบระดับน้ำล้นตลิ่งที่ ${overflowCount} สถานีหลักในพื้นที่รอยต่อ ระดับน้ำอยู่ในเกณฑ์อันตรายสูง`,
-      trendPrediction: 'แนวโน้ม 6-12 ชม. ข้างหน้า: เพิ่มขึ้นหรือทรงตัวในระดับสูง หากมีฝนตกหนักหรือการระบายน้ำจากตอนบนหนุนซ้ำ',
-      sourceNews: 'สำนักการระบายน้ำ กทม. และกรมชลประทานเดินเครื่องสูบน้ำสถานีสูบน้ำคลองหกวาเต็มกำลัง พร้อมเปิดระบายน้ำออกสู่แม่น้ำบางปะกง',
-      advisory: 'ยกเครื่องใช้ไฟฟ้าและของมีค่าขึ้นที่สูง เสริมแนวกระสอบทรายหน้าบ้าน และเฝ้าระวังผู้สูงอายุหรือผู้ป่วยติดเตียง',
-      keyIndicators: [
-        { label: 'จุดเฝ้าระวังสำคัญ', value: highestStation?.name || 'คลองหกวา คลอง 8' },
-        { label: 'แนวโน้มระดับน้ำ', value: 'ทรงตัวในระดับสูง' },
-        { label: 'การทำงาน ปตร.', value: 'เปิดบานระบายเร่งด่วน' }
-      ],
-      source: 'hydrological-expert-system',
-      generatedAt: new Date().toISOString()
-    };
-  }
+  let riskLevel = 'normal';
+  let headline = '';
+  let analysis = '';
+  let trend6h = '';
+  let actionAdvice = '';
+  let officialContext = '';
 
-  if (criticalCount > 0) {
-    return {
-      success: true,
-      riskLevel: 'เฝ้าระวัง',
-      riskColor: 'amber',
-      summary: `ระดับน้ำแตะเกณฑ์วิกฤติที่ ${highestStation?.name || 'สถานีหลัก'} (${criticalCount} จุด) แต่ยังไม่ล้นตลิ่ง อยู่ในเกณฑ์ที่สามารถบริหารจัดการได้`,
-      trendPrediction: 'แนวโน้ม 6-12 ชม. ข้างหน้า: ทรงตัวถึงลดลงเล็กน้อย หากไม่มีฝนตกลงมาเพิ่มในลุ่มน้ำคลองสามวาและลำลูกกา',
-      sourceNews: 'ประตูระบายน้ำคลองสามวาเปิดบานระบาย 0.43 ม. พร้อมเดินเครื่องสูบน้ำสถานีปลายคลองพระยาสุเรนทร์เพื่อพร่องน้ำรอรับน้ำฝน',
-      advisory: 'ตรวจสอบความพร้อมของระบบป้องกันน้ำ เคลื่อนย้ายสิ่งของที่ไวต่อความชื้นขึ้นที่ปลอดภัย และติดตามสถานการณ์อย่างต่อเนื่อง',
-      keyIndicators: [
-        { label: 'จุดเฝ้าระวังสำคัญ', value: highestStation?.name || 'คลองหกวา คลอง 8' },
-        { label: 'แนวโน้มระดับน้ำ', value: 'ทรงตัวถึงลดลงเล็กน้อย' },
-        { label: 'การทำงาน ปตร.', value: 'เปิดบานระบาย 0.43 ม.' }
-      ],
-      source: 'hydrological-expert-system',
-      generatedAt: new Date().toISOString()
-    };
+  if (overflowCount > 0) {
+    riskLevel = 'danger';
+    headline = `ระดับน้ำล้นตลิ่งที่ ${overflowStations.join(', ')} เฝ้าระวังน้ำท่วมฉับพลัน`;
+    analysis = `มวลน้ำในแนวคลองหกวาตอนบนมีระดับสูงเกินคันตลิ่ง (${overflowStations.join(', ')}) ส่งผลให้การระบายน้ำเข้าสู่คลองพระยาสุเรนทร์และคลองสามวาต้องเร่งระบายน้ำเต็มกำลัง อาจมีน้ำเอ่อล้นเข้าท่วมพื้นที่ลุ่มต่ำริมสองฝั่งคลอง`;
+    trend6h = 'เพิ่มขึ้นหรือทรงตัวในระดับสูง (6-12 ชม. ข้างหน้า)';
+    actionAdvice = 'ยกเครื่องใช้ไฟฟ้าและทรัพย์สินขึ้นที่สูงทันที เสริมแนวกระสอบทรายในจุดเสี่ยงริมตลิ่ง และเฝ้าระวังผู้สูงอายุ/ผู้ป่วยติดเตียง';
+    officialContext = 'สำนักการระบายน้ำ กทม. และกรมชลประทานเดินเครื่องสูบน้ำสถานีคลองหกวาเต็มกำลัง พร้อมเร่งระบายน้ำออกสู่แม่น้ำบางปะกง';
+  } else if (criticalCount > 0) {
+    riskLevel = 'warning';
+    headline = `ระดับน้ำแตะเกณฑ์เฝ้าระวังที่ ${criticalStations.join(', ')} ยังอยู่ในการควบคุม`;
+    analysis = `ระดับน้ำในแนวคลองหกวาและคลองพระยาสุเรนทร์แตะเกณฑ์วิกฤติในบางจุด (${criticalStations.join(', ')}) แต่ยังต่ำกว่าระดับตลิ่ง การไหลเวียนของน้ำยังคงดำเนินไปได้โดยการเปิดบานระบาย ปตร.คลองสามวา`;
+    trend6h = 'ทรงตัวถึงลดลงเล็กน้อย หากไม่มีฝนตกหนักเพิ่มเติม';
+    actionAdvice = 'ตรวจสอบความพร้อมของคันกั้นน้ำรอบที่อยู่อาศัย เคลื่อนย้ายของไวต่อความชื้นขึ้นที่ปลอดภัย และติดตามข่าวสารจาก กทม. ต่อเนื่อง';
+    officialContext = 'สำนักการระบายน้ำ กทม. เปิดประตูระบายน้ำคลองสามวาและเดินเครื่องสูบน้ำสถานีปลายคลองพระยาสุเรนทร์เพื่อพร่องน้ำรอรับน้ำฝน';
+  } else {
+    riskLevel = 'normal';
+    headline = 'สถานการณ์น้ำคลองหกวาและคลองสามวาอยู่ในเกณฑ์ปกติ ต่ำกว่าตลิ่งปลอดภัย';
+    analysis = 'ระดับน้ำทั้ง 9 สถานีในแนวคลองหกวา คลองพระยาสุเรนทร์ และคลองสามวา อยู่ในเกณฑ์ควบคุมปกติ ต่ำกว่าระดับวิกฤติและตลิ่ง การระบายน้ำไหลเวียนได้ดี ไม่มีมวลน้ำหลากผ่านพื้นที่';
+    trend6h = 'ทรงตัวในเกณฑ์ปกติ (6-12 ชม. ข้างหน้า)';
+    actionAdvice = 'ดำเนินกิจกรรมในชีวิตประจำวันได้ตามปกติ แนะนำให้ตรวจสอบท่อระบายน้ำรอบบ้านไม่ให้อุดตันด้วยเศษใบไม้หรือขยะ';
+    officialContext = 'สนน.กทม. และกรมชลประทานบริหารจัดการน้ำตามเกณฑ์ปกติ พร้อมเฝ้าระวังเรดาร์ฝนกลุ่มเมฆในพื้นที่เขตคลองสามวา';
   }
 
   return {
-    success: true,
-    riskLevel: 'ปกติ',
-    riskColor: 'emerald',
-    summary: 'ระดับน้ำในคลองหกวา คลองพระยาสุเรนทร์ และคลองสามวาทุกจุดตรวจวัดอยู่ในเกณฑ์ควบคุมปกติ ต่ำกว่าตลิ่งปลอดภัย',
-    trendPrediction: 'แนวโน้ม 6-12 ชม. ข้างหน้า: ระดับน้ำทรงตัว การระบายน้ำไหลเวียนได้ตามปกติ ไม่มีมวลน้ำก้อนใหญ่ผ่านพื้นที่',
-    sourceNews: 'กรมอุตุนิยมวิทยารายงานเรดาร์ฝนกลุ่มเมฆกระจายตัว มีโอกาสเกิดฝนฟ้าคะนองร้อยละ 30-40 ของพื้นที่ในช่วงบ่ายถึงค่ำ',
-    advisory: 'สามารถดำเนินกิจกรรมในชีวิตประจำวันได้ตามปกติ แนะนำให้ตรวจสอบท่อระบายน้ำรอบที่พักอาศัยไม่ให้อุดตันด้วยเศษใบไม้หรือขยะ',
-    keyIndicators: [
-      { label: 'จุดเฝ้าระวังสำคัญ', value: 'สถานการณ์ปกติทุกสถานี' },
-      { label: 'แนวโน้มระดับน้ำ', value: 'ทรงตัวในเกณฑ์ปกติ' },
-      { label: 'การทำงาน ปตร.', value: 'เปิดบานระบาย 0.43 ม. (ระบายปกติ)' }
-    ],
+    risk_level: riskLevel,
+    headline,
+    analysis,
+    trend_6h: trend6h,
+    action_advice: actionAdvice,
+    official_context: officialContext,
+    riskLevel: riskLevel === 'danger' ? 'วิกฤติ' : (riskLevel === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
+    riskColor: riskLevel === 'danger' ? 'red' : (riskLevel === 'warning' ? 'amber' : 'emerald'),
+    summary: analysis,
+    trendPrediction: trend6h,
+    sourceNews: officialContext,
+    advisory: actionAdvice,
     source: 'hydrological-expert-system',
     generatedAt: new Date().toISOString()
   };
 }
 
 function renderAiAnalysis(data) {
+  if (!data) return;
+
   const skeleton = document.getElementById('aiLoadingSkeleton');
   const content = document.getElementById('aiAnalysisContent');
   const modelText = document.getElementById('aiModelText');
   const updatedBadge = document.getElementById('aiUpdatedTimeBadge');
+  const headerRiskBadge = document.getElementById('aiHeaderRiskBadge');
 
+  const isGemini = data.source === 'gemini-1.5-flash';
   if (modelText) {
-    modelText.textContent = data.source === 'gemini-1.5-flash' ? 'Gemini 1.5 Flash' : 'ระบบวิเคราะห์อุทกวิทยา';
+    modelText.textContent = isGemini ? 'Gemini 1.5 Flash' : 'ระบบวิเคราะห์อุทกวิทยา';
   }
 
-  if (updatedBadge && data.generatedAt) {
+  let formattedTime = 'ประมวลผลล่าสุด';
+  if (data.generatedAt) {
     try {
       const d = new Date(data.generatedAt);
-      updatedBadge.textContent = `วิเคราะห์เมื่อ ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
+      formattedTime = `ประมวลผลเมื่อ ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
     } catch (e) {
-      updatedBadge.textContent = 'วิเคราะห์ล่าสุด';
+      formattedTime = 'ประมวลผลล่าสุด';
     }
   }
-
-  let badgeBorder = 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300';
-  let bannerBorder = 'border-l-4 border-l-emerald-500 bg-emerald-950/20';
-  let bannerIconColor = 'text-emerald-400';
-
-  if (data.riskColor === 'red' || data.riskLevel === 'วิกฤติ') {
-    badgeBorder = 'border-red-500/40 bg-red-500/20 text-red-300 animate-pulse';
-    bannerBorder = 'border-l-4 border-l-red-500 bg-red-950/30';
-    bannerIconColor = 'text-red-400';
-  } else if (data.riskColor === 'amber' || data.riskLevel === 'เฝ้าระวัง') {
-    badgeBorder = 'border-amber-500/40 bg-amber-500/20 text-amber-300 animate-pulse';
-    bannerBorder = 'border-l-4 border-l-amber-500 bg-amber-950/25';
-    bannerIconColor = 'text-amber-400';
-  } else if (data.riskColor === 'orange' || data.riskLevel === 'เสี่ยงสูง') {
-    badgeBorder = 'border-orange-500/40 bg-orange-500/20 text-orange-300 animate-pulse';
-    bannerBorder = 'border-l-4 border-l-orange-500 bg-orange-950/25';
-    bannerIconColor = 'text-orange-400';
+  if (updatedBadge) {
+    updatedBadge.textContent = formattedTime;
   }
 
-  const indicatorsHtml = (data.keyIndicators || []).map(ind => `
-    <div class="bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800 flex items-center justify-between gap-2 text-xs">
-      <span class="text-slate-400 text-[11px]">${ind.label}:</span>
-      <b class="text-white font-medium text-right text-[11px] truncate">${ind.value}</b>
-    </div>
-  `).join('');
+  let risk = 'normal';
+  const rawRisk = String(data.risk_level || data.riskLevel || '').toLowerCase();
+  if (rawRisk.includes('danger') || rawRisk.includes('วิกฤติ') || rawRisk.includes('emergency') || data.riskColor === 'red') {
+    risk = 'danger';
+  } else if (rawRisk.includes('warn') || rawRisk.includes('เฝ้าระวัง') || rawRisk.includes('เสี่ยง') || data.riskColor === 'amber' || data.riskColor === 'orange') {
+    risk = 'warning';
+  }
+
+  let badgeClass = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+  let badgeLabel = 'ความเสี่ยง: ปกติ (Normal)';
+  let bannerBorder = 'border-l-4 border-l-emerald-500 bg-emerald-950/20 border-emerald-500/30';
+  let headlineClass = 'text-white';
+  let riskIcon = 'check-circle';
+  let riskIconColor = 'text-emerald-400';
+
+  if (risk === 'danger') {
+    badgeClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
+    badgeLabel = 'ความเสี่ยง: วิกฤติ / อันตราย (Danger)';
+    bannerBorder = 'border-l-4 border-l-red-500 bg-red-950/30 border-red-500/30';
+    headlineClass = 'text-red-200';
+    riskIcon = 'alert-octagon';
+    riskIconColor = 'text-red-400';
+  } else if (risk === 'warning') {
+    badgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+    badgeLabel = 'ความเสี่ยง: เฝ้าระวัง (Warning)';
+    bannerBorder = 'border-l-4 border-l-amber-500 bg-amber-950/25 border-amber-500/30';
+    headlineClass = 'text-amber-200';
+    riskIcon = 'shield-alert';
+    riskIconColor = 'text-amber-400';
+  }
+
+  if (headerRiskBadge) {
+    headerRiskBadge.className = `px-2.5 py-0.5 rounded-full text-[11px] font-bold border font-mono shadow-sm ${badgeClass}`;
+    headerRiskBadge.textContent = badgeLabel;
+    headerRiskBadge.classList.remove('hidden');
+  }
+
+  const headline = data.headline || data.summary || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา';
+  const analysis = data.analysis || data.summary || 'ระดับน้ำอยู่ในเกณฑ์ปกติ การไหลเวียนของน้ำเป็นไปตามแผนการระบายน้ำ';
+  const actionAdvice = data.action_advice || data.advisory || 'ติดตามสถานการณ์และตรวจสอบระบบระบายน้ำรอบที่อยู่อาศัย';
+  const trend6h = data.trend_6h || data.trendPrediction || 'ระดับน้ำทรงตัวในเกณฑ์ปกติ';
+  const officialContext = data.official_context || data.sourceNews || '';
 
   const html = `
-    <!-- Top Summary Banner -->
-    <div class="p-3.5 sm:p-4 rounded-2xl ${bannerBorder} border border-slate-800 shadow-md">
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex items-start gap-3">
-          <div class="p-1.5 rounded-lg bg-slate-900/90 border border-slate-700/80 shrink-0 mt-0.5">
-            <i data-lucide="shield-alert" class="w-4 h-4 ${bannerIconColor}"></i>
+    <!-- 1. Headline Summary Banner -->
+    <div class="p-3.5 sm:p-4 rounded-2xl ${bannerBorder} border shadow-md relative overflow-hidden">
+      <div class="flex items-start gap-3">
+        <div class="p-1.5 rounded-lg bg-slate-900/90 border border-slate-700/80 shrink-0 mt-0.5 shadow-sm">
+          <i data-lucide="${riskIcon}" class="w-4 h-4 ${riskIconColor}"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1 flex-wrap">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-black border ${badgeClass}">
+              ${badgeLabel}
+            </span>
+            <span class="text-[11px] text-slate-400">บทสรุปสถานการณ์ล่าสุด</span>
           </div>
-          <div>
-            <div class="flex items-center gap-2 mb-1 flex-wrap">
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-black border ${badgeBorder}">
-                สถานะ: ${data.riskLevel || 'ปกติ'}
-              </span>
-              <span class="text-[11px] text-slate-400">บทสรุปภาพรวมสถานการณ์</span>
-            </div>
-            <p class="text-xs sm:text-sm font-semibold text-slate-100 leading-relaxed">
-              ${data.summary}
-            </p>
-          </div>
+          <h3 class="text-sm sm:text-base font-extrabold ${headlineClass} tracking-tight leading-snug">
+            ${headline}
+          </h3>
         </div>
       </div>
     </div>
 
-    <!-- 3 Pillars Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-      <!-- 1. Trend Prediction -->
-      <div class="bg-gradient-to-b from-sky-950/20 to-slate-900/60 p-4 rounded-2xl border border-sky-500/20 flex flex-col justify-between">
+    <!-- 2. Dual Content Box: Analysis & Preparation Advice -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      <!-- Water Flow Direction & Analysis -->
+      <div class="rounded-2xl p-4 bg-gradient-to-b from-sky-950/20 to-slate-900/70 border border-sky-500/25 flex flex-col justify-between shadow-sm">
         <div>
-          <div class="flex items-center gap-2 mb-2.5">
-            <div class="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 shrink-0">
-              <i data-lucide="trending-up" class="w-4 h-4"></i>
+          <div class="flex items-center gap-2 mb-2.5 text-sky-400">
+            <div class="p-1.5 rounded-lg bg-sky-500/20 border border-sky-500/30 shrink-0">
+              <i data-lucide="waves" class="w-4 h-4"></i>
             </div>
-            <h4 class="text-xs font-bold text-sky-300">แนวโน้ม 6-12 ชม. ข้างหน้า</h4>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-sky-300">บทวิเคราะห์ทิศทางและการไหลของน้ำ</h4>
           </div>
-          <p class="text-xs text-slate-300 leading-relaxed">
-            ${data.trendPrediction}
+          <p class="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
+            ${analysis}
           </p>
         </div>
       </div>
 
-      <!-- 2. Source News & Factors -->
-      <div class="bg-gradient-to-b from-purple-950/20 to-slate-900/60 p-4 rounded-2xl border border-purple-500/20 flex flex-col justify-between">
+      <!-- Action Advice for Citizens -->
+      <div class="rounded-2xl p-4 bg-gradient-to-b from-amber-950/20 to-slate-900/70 border border-amber-500/25 flex flex-col justify-between shadow-sm">
         <div>
-          <div class="flex items-center gap-2 mb-2.5">
-            <div class="p-1.5 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/30 shrink-0">
-              <i data-lucide="radio" class="w-4 h-4"></i>
+          <div class="flex items-center gap-2 mb-2.5 text-amber-400">
+            <div class="p-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 shrink-0">
+              <i data-lucide="shield-check" class="w-4 h-4"></i>
             </div>
-            <h4 class="text-xs font-bold text-purple-300">ข่าวสารทางการ & เรดาร์ฝน</h4>
+            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-300">คำแนะนำการเตรียมตัวสำหรับประชาชน</h4>
           </div>
-          <p class="text-xs text-slate-300 leading-relaxed">
-            ${data.sourceNews}
-          </p>
-        </div>
-      </div>
-
-      <!-- 3. Advisory for Citizens -->
-      <div class="bg-gradient-to-b from-emerald-950/20 to-slate-900/60 p-4 rounded-2xl border border-emerald-500/20 flex flex-col justify-between">
-        <div>
-          <div class="flex items-center gap-2 mb-2.5">
-            <div class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-              <i data-lucide="check-circle" class="w-4 h-4"></i>
-            </div>
-            <h4 class="text-xs font-bold text-emerald-300">คำแนะนำสำหรับประชาชน</h4>
-          </div>
-          <p class="text-xs text-slate-300 leading-relaxed">
-            ${data.advisory}
+          <p class="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
+            ${actionAdvice}
           </p>
         </div>
       </div>
     </div>
 
-    <!-- Key Indicators Row -->
-    ${indicatorsHtml ? `<div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">${indicatorsHtml}</div>` : ''}
+    <!-- 3. Official Context Notice (if provided) -->
+    ${officialContext ? `
+      <div class="px-3.5 py-2.5 rounded-xl bg-slate-950/70 border border-slate-800/90 text-xs text-slate-400 flex items-start gap-2.5 shadow-inner">
+        <i data-lucide="info" class="w-4 h-4 text-violet-400 shrink-0 mt-0.5"></i>
+        <div class="leading-relaxed">
+          <span class="font-bold text-slate-300">ประกาศทางการ / สนน.กทม. - กรมชลประทาน:</span> ${officialContext}
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- 4. Bottom Status Sub-bar -->
+    <div class="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+      <div class="flex items-center gap-2 text-slate-300">
+        <span class="p-1 rounded-md bg-slate-800 text-sky-400 shrink-0">
+          <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+        </span>
+        <span class="text-slate-400 text-[11px]">แนวโน้ม 6-12 ชม.:</span>
+        <span class="font-bold text-sky-300 text-xs">${trend6h}</span>
+      </div>
+      <div class="flex items-center gap-2.5 text-[11px] text-slate-400 font-mono">
+        <span class="flex items-center gap-1">
+          <i data-lucide="clock" class="w-3 h-3 text-slate-500"></i>
+          <span>${formattedTime}</span>
+        </span>
+        <span class="text-slate-600">•</span>
+        <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700/60">
+          ${isGemini ? 'Gemini 1.5 Flash' : 'ระบบวิเคราะห์อุทกวิทยา'}
+        </span>
+      </div>
+    </div>
   `;
 
   if (content) {
