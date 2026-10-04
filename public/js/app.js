@@ -1204,6 +1204,30 @@ function formatPopupTime(value) {
   return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')} น.`;
 }
 
+function getUnifiedWaterTrend(levels) {
+  const numericLevels = Array.isArray(levels)
+    ? levels.map(value => Number(value)).filter(Number.isFinite)
+    : [];
+
+  if (numericLevels.length < 2) {
+    return { text: 'ทรงตัว', icon: '—', status: 'stable', color: 'text-slate-400' };
+  }
+
+  const current = numericLevels[numericLevels.length - 1];
+  const lookbackIndex = Math.max(0, numericLevels.length - 4);
+  const recentBase = numericLevels[lookbackIndex];
+  const diff = current - recentBase;
+
+  if (diff > 0.05) {
+    return { text: 'แนวโน้มเพิ่มขึ้น', icon: '📈', status: 'rising', color: 'text-amber-400' };
+  }
+  if (diff < -0.05) {
+    return { text: 'แนวโน้มลดลง', icon: '📉', status: 'falling', color: 'text-cyan-400' };
+  }
+  return { text: 'แนวโน้มทรงตัว', icon: '—', status: 'stable', color: 'text-slate-300' };
+}
+window.getUnifiedWaterTrend = getUnifiedWaterTrend;
+
 function getPopupHistoryValues(station) {
   const rawValues = station.waterLevels || station.history || station.waterHistory;
   const values = Array.isArray(rawValues)
@@ -1216,19 +1240,6 @@ function getPopupHistoryValues(station) {
   const trend = String(station.trend || '').toLowerCase();
   const direction = trend === 'rising' ? 1 : (trend === 'falling' ? -1 : 0);
   return Array.from({ length: 12 }, (_, index) => current - direction * (11 - index) * 0.01);
-}
-
-function getPopupTrendLabel(values) {
-  if (!Array.isArray(values) || values.length < 2) return 'ทรงตัว';
-  const latest = Number(values[values.length - 1]);
-  const recent = values.slice(Math.max(0, values.length - 4), -1)
-    .map(Number)
-    .filter(Number.isFinite);
-  if (!Number.isFinite(latest) || recent.length === 0) return 'ทรงตัว';
-  const average = recent.reduce((sum, value) => sum + value, 0) / recent.length;
-  if (latest - average <= -0.03) return 'ลดลง';
-  if (latest - average >= 0.03) return 'เพิ่มขึ้น';
-  return 'ทรงตัว';
 }
 
 function drawStationPopupSparkline(station, values = getPopupHistoryValues(station)) {
@@ -1291,13 +1302,19 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
 async function renderStationPopupSparkline(station) {
   const fallbackValues = getPopupHistoryValues(station);
   drawStationPopupSparkline(station, fallbackValues);
-  const trendLabel = getPopupTrendLabel(fallbackValues);
-  const trendElement = document.querySelector(`#popup-chart-${station.id}`)?.previousElementSibling?.querySelector('b');
-  if (trendElement) trendElement.textContent = trendLabel;
+  const trendElement = document.getElementById(`popup-trend-${station.id}`);
+  const applyTrend = values => {
+    const trend = getUnifiedWaterTrend(values);
+    if (trendElement) {
+      trendElement.className = `${trend.color} font-semibold`;
+      trendElement.textContent = `${trend.icon} ${trend.text}`;
+    }
+  };
+  applyTrend(fallbackValues);
   if (popupHistoryCache.has(station.id)) {
     const values = popupHistoryCache.get(station.id);
     drawStationPopupSparkline(station, values);
-    if (trendElement) trendElement.textContent = getPopupTrendLabel(values);
+    applyTrend(values);
     return;
   }
 
@@ -1312,7 +1329,7 @@ async function renderStationPopupSparkline(station) {
     if (values.length > 1) {
       popupHistoryCache.set(station.id, values);
       drawStationPopupSparkline(station, values);
-      if (trendElement) trendElement.textContent = getPopupTrendLabel(values);
+      applyTrend(values);
     }
   } catch (err) {
     console.warn('[Popup Sparkline] History unavailable:', err);
@@ -1446,10 +1463,7 @@ function updateMapMarkers() {
 
     const sourceUrl = getStationSourceUrl(station);
     const popupChartId = `popup-chart-${station.id}`;
-    const trendText = station.trendText || (
-      String(station.trend || '').toLowerCase() === 'rising' ? 'เพิ่มขึ้น' :
-      String(station.trend || '').toLowerCase() === 'falling' ? 'ลดลง' : 'ทรงตัว'
-    );
+    const popupTrend = getUnifiedWaterTrend(getPopupHistoryValues(station));
 
     let bodyPopupHtml = '';
     if (station.isGate && station.inside && station.outside) {
@@ -1552,7 +1566,7 @@ function updateMapMarkers() {
             <span class="text-[9px] text-cyan-400 opacity-80 group-hover:opacity-100">แตะเพื่อดูกราฟใหญ่ ↗</span>
           </div>
           <div>
-            <b class="text-sky-300">${trendText}</b>
+            <b id="popup-trend-${station.id}" class="${popupTrend.color} font-semibold">${popupTrend.icon} ${popupTrend.text}</b>
             <canvas id="${popupChartId}" height="55" class="w-full mt-1"></canvas>
           </div>
         </div>
@@ -4247,89 +4261,6 @@ function viewStationHistory(stationId) {
 }
 window.viewStationHistory = viewStationHistory;
 
-function calculateChartTrend(values) {
-  const numericValues = Array.isArray(values)
-    ? values.map(value => Number(value)).filter(Number.isFinite)
-    : [];
-  if (numericValues.length === 0) {
-    return {
-      icon: 'minus',
-      text: 'แนวโน้มทรงตัว',
-      className: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
-    };
-  }
-
-  const latest = numericValues[numericValues.length - 1];
-  const previousStart = Math.max(0, numericValues.length - 4);
-  const previousValues = numericValues.slice(previousStart, -1);
-  const previousAverage = previousValues.length > 0
-    ? previousValues.reduce((sum, value) => sum + value, 0) / previousValues.length
-    : latest;
-  const recentDelta = latest - previousAverage;
-  const range = Math.max(...numericValues) - Math.min(...numericValues);
-
-  let directionChanges = 0;
-  let previousDirection = 0;
-  for (let index = 1; index < numericValues.length; index++) {
-    const delta = numericValues[index] - numericValues[index - 1];
-    const direction = Math.abs(delta) < 0.01 ? 0 : Math.sign(delta);
-    if (direction !== 0 && previousDirection !== 0 && direction !== previousDirection) {
-      directionChanges++;
-    }
-    if (direction !== 0) previousDirection = direction;
-  }
-
-  if (recentDelta <= -0.10) {
-    return {
-      icon: 'trending-down',
-      text: 'แนวโน้มลดลงรวดเร็ว',
-      className: 'bg-sky-500/15 text-sky-300 border-sky-400/40'
-    };
-  }
-  if (recentDelta >= 0.10) {
-    return {
-      icon: 'trending-up',
-      text: 'แนวโน้มเพิ่มขึ้นรวดเร็ว',
-      className: 'bg-orange-500/15 text-orange-300 border-orange-400/40'
-    };
-  }
-  if (range > 0.25 && directionChanges >= 2) {
-    return {
-      icon: recentDelta < -0.03 ? 'waves' : 'activity',
-      text: recentDelta < -0.03
-        ? 'แนวโน้มผันผวน (ลดลงช่วงท้าย)'
-        : 'แนวโน้มผันผวน',
-      className: 'bg-violet-500/15 text-violet-300 border-violet-400/40'
-    };
-  }
-  if (range < 0.05) {
-    return {
-      icon: 'minus',
-      text: 'แนวโน้มทรงตัว',
-      className: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
-    };
-  }
-  if (recentDelta < -0.03) {
-    return {
-      icon: 'trending-down',
-      text: 'แนวโน้มลดลง',
-      className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/40'
-    };
-  }
-  if (recentDelta > 0.03) {
-    return {
-      icon: 'trending-up',
-      text: 'แนวโน้มเพิ่มขึ้น',
-      className: 'bg-amber-500/15 text-amber-300 border-amber-400/40'
-    };
-  }
-  return {
-    icon: 'minus',
-    text: 'แนวโน้มทรงตัว',
-    className: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
-  };
-}
-
 function renderWaterHistoryChart(stationId, liveData) {
   if (typeof Chart === 'undefined') {
     initChart(stationId, liveData);
@@ -4428,14 +4359,14 @@ function renderWaterHistoryChart(stationId, liveData) {
     }
   }
 
-  // Update Trend Pill from the latest 3-hour movement and 24-hour volatility.
+  // Update Trend Pill from the same single-source trend calculation used by popups.
   const trendPill = document.getElementById('chartTrendPill');
   const trendText = document.getElementById('chartTrendText');
   if (trendPill && trendText) {
-    const trend = calculateChartTrend(st.waterLevels);
-    trendPill.className = `px-2.5 py-1 rounded-xl text-xs font-semibold ${trend.className} flex items-center gap-1.5 shadow-sm`;
-    trendPill.innerHTML = `<i data-lucide="${trend.icon}" class="w-3.5 h-3.5"></i><span id="chartTrendText">${trend.text}</span>`;
-    if (window.lucide) window.lucide.createIcons();
+    const trend = getUnifiedWaterTrend(st.waterLevels);
+    trendPill.className = `px-2.5 py-1 rounded-xl text-xs font-semibold ${trend.color} border border-slate-500/30 flex items-center gap-1.5 shadow-sm`;
+    trendText.textContent = `${trend.icon} ${trend.text}`;
+    trendText.className = `${trend.color} font-semibold`;
   }
 
   // Update Stats Tiles (Matching latest level 1:1)
