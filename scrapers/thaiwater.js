@@ -16,7 +16,7 @@ const LNG = ST1_CONFIG ? ST1_CONFIG.lng : 100.77499;
 
 let cachedData = null;
 const INITIAL_BASELINE = {
-  level: 1.67,
+  level: 1.92,
   time: new Date().toISOString()
 };
 

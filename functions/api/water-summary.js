@@ -202,7 +202,7 @@ const STATIONS_MASTER_CONFIG = [
 
 // Realistic baselines for cold start or network fallback
 const FALLBACK_BASELINES = {
-  'thaiwater_k8':    { level: 1.67, time: '02/10/2569 20:30' },
+  'thaiwater_k8':    { level: 1.92, time: '02/10/2569 20:30' },
   'bma_wf_k0801':    { level: 1.80, time: '02/10/2569 20:45' },
   'bma_wf_khw01':    { level: 1.87, time: '02/10/2569 20:45' },
   'bma_wf_swa02':    { level: 1.46, time: '02/10/2569 20:45' },

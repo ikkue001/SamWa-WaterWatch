@@ -505,94 +505,112 @@ const STATIONS_MAP = {
   'thaiwater_k8': {
     stCode: 'ST-1',
     id: 'thaiwater_k8',
+    thaiwaterId: 37,
+    uuid: null,
     bmaId: null,
-    source: 'Thaiwater',
+    source: 'ThaiWater',
     name: 'คลองหกวา ลำลูกกา คลอง 8',
     canal: 'คลองหกวา',
     bankLevel: 2.71,
     criticalLevel: 2.41,
-    fallbackLevel: 1.66
+    fallbackLevel: 1.92
   },
   'bma_wf_k0801': {
     stCode: 'ST-2',
     id: 'bma_wf_k0801',
+    thaiwaterId: null,
+    uuid: '69ae363d-80d0-47c0-97c4-14731bb235e1',
     bmaId: null,
     source: 'BMA Waterflow',
     name: 'ปตร.คลองแปด ตอนซอย อบจ.ปทุมธานี 2006',
     canal: 'คลองหกวา',
     bankLevel: 2.00,
     criticalLevel: 1.80,
-    fallbackLevel: 1.80
+    fallbackLevel: 1.79
   },
   'bma_wf_khw01': {
     stCode: 'ST-3',
     id: 'bma_wf_khw01',
+    thaiwaterId: null,
+    uuid: '6bceb086-0008-4910-bda8-d8e618ab3c5d',
     bmaId: null,
     source: 'BMA Waterflow',
     name: 'สถานีสูบน้ำกลางคลองหกวา ตอนถนนนิมิตใหม่',
     canal: 'คลองหกวา',
     bankLevel: 2.30,
-    criticalLevel: 2.10,
-    fallbackLevel: 1.85
+    criticalLevel: 2.00,
+    fallbackLevel: 1.82
   },
   'bma_wf_swa02': {
     stCode: 'ST-4',
     id: 'bma_wf_swa02',
+    thaiwaterId: null,
+    uuid: '05b29a52-712d-4b90-a4ff-b2c2eb9817ff',
     bmaId: null,
     source: 'BMA Waterflow',
     name: 'คลองสามวา ตอนถนนเทศบาลลำลูกกา 1',
     canal: 'คลองสามวา',
     bankLevel: 2.00,
     criticalLevel: 1.80,
-    fallbackLevel: 1.44
+    fallbackLevel: 1.40
   },
   'bma_weather_126': {
     stCode: 'ST-5',
     id: 'bma_weather_126',
+    thaiwaterId: null,
+    uuid: null,
     bmaId: 126,
     source: 'BMA Weather',
     name: 'คลองพระยาสุเรนทร์ ตอนถนนหนองระแหง',
     canal: 'คลองพระยาสุเรนทร์',
     bankLevel: 1.60,
     criticalLevel: 1.20,
-    fallbackLevel: 1.34
+    fallbackLevel: 1.39
   },
   'bma_weather_125': {
     stCode: 'ST-6',
     id: 'bma_weather_125',
+    thaiwaterId: null,
+    uuid: null,
     bmaId: 125,
     source: 'BMA Weather',
     name: 'คลองพระยาสุเรนทร์ ตอนถนนจตุโชติ',
     canal: 'คลองพระยาสุเรนทร์',
     bankLevel: 1.50,
     criticalLevel: 1.20,
-    fallbackLevel: 1.31
+    fallbackLevel: 1.37
   },
   'bma_weather_124': {
     stCode: 'ST-7',
     id: 'bma_weather_124',
+    thaiwaterId: null,
+    uuid: null,
     bmaId: 124,
     source: 'BMA Weather',
     name: 'ปตร.พระยาสุเรนทร์ ตอนคู้บอน',
     canal: 'คลองพระยาสุเรนทร์',
     bankLevel: 1.30,
     criticalLevel: 0.80,
-    fallbackLevel: 0.92
+    fallbackLevel: 0.99
   },
   'bma_weather_127': {
     stCode: 'ST-8',
     id: 'bma_weather_127',
+    thaiwaterId: null,
+    uuid: null,
     bmaId: 127,
     source: 'BMA Weather',
     name: 'คลองพระยาสุเรนทร์ ตอนปัญญาอินทรา',
     canal: 'คลองพระยาสุเรนทร์',
     bankLevel: 1.40,
     criticalLevel: 1.00,
-    fallbackLevel: 0.94
+    fallbackLevel: 1.00
   },
   'bma_weather_21': {
     stCode: 'ST-9',
     id: 'bma_weather_21',
+    thaiwaterId: null,
+    uuid: null,
     bmaId: 21,
     source: 'BMA Weather',
     name: 'ประตูระบายน้ำคลองสามวา (ถนนประชาร่วมใจ)',
@@ -600,11 +618,40 @@ const STATIONS_MAP = {
     isGate: true,
     bankLevel: 1.70,
     criticalLevel: 1.30,
-    fallbackLevel: 1.35
+    fallbackLevel: 1.39
   }
 };
 
 const STATIONS_HISTORY_METADATA = STATIONS_MAP;
+const GLOBAL_SERVER_HISTORY_CACHE = new Map();
+let serverCachedBmaToken = null;
+let serverBmaTokenExpiresAt = 0;
+
+async function getServerBmaWaterflowToken() {
+  if (serverCachedBmaToken && Date.now() < serverBmaTokenExpiresAt) {
+    return serverCachedBmaToken;
+  }
+  const res = await fetch('https://bmawaterflow.bangkok.go.th/API/Authentication/Client', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Origin': 'https://bmawaterflow.bangkok.go.th',
+      'Referer': 'https://bmawaterflow.bangkok.go.th/map',
+      'User-Agent': 'Mozilla/5.0'
+    },
+    body: JSON.stringify({
+      clientId: 'dds-measure-web',
+      clientSecret: 'f1d6cf67-946b-4586-934a-6a770d993983'
+    })
+  });
+  if (!res.ok) throw new Error(`BMA Auth HTTP ${res.status}`);
+  const auth = await res.json();
+  const token = auth.token;
+  if (!token) throw new Error('No token returned');
+  serverCachedBmaToken = token;
+  serverBmaTokenExpiresAt = Date.now() + 50 * 60 * 1000;
+  return token;
+}
 
 function resolveStationMeta(query) {
   if (!query) return STATIONS_MAP['thaiwater_k8'];
@@ -619,6 +666,9 @@ function resolveStationMeta(query) {
       return item;
     }
     if (item.bmaId && String(item.bmaId) === q) {
+      return item;
+    }
+    if (item.thaiwaterId && String(item.thaiwaterId) === q) {
       return item;
     }
   }
@@ -639,54 +689,26 @@ function parseThaiDate(str) {
   return new Date(Date.UTC(y, month, day, hour - 7, minute));
 }
 
+function parseThaiwaterDateTime(dtStr) {
+  if (!dtStr) return null;
+  const m = dtStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10) - 1;
+  const d = parseInt(m[3], 10);
+  const h = parseInt(m[4], 10);
+  const mi = parseInt(m[5], 10);
+  return new Date(Date.UTC(y, mo, d, h - 7, mi));
+}
+
 function formatThaiTimeLabel(dateObj) {
   const dThai = new Date(dateObj.getTime() + 7 * 3600 * 1000);
   return String(dThai.getUTCHours()).padStart(2, '0') + ':' + String(dThai.getUTCMinutes()).padStart(2, '0');
 }
 
-const bmaHistoryCache = new Map();
-const BMA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
-
-async function fetchRealBmaWeatherHistory(bmaId, meta, now = new Date()) {
-  const cached = bmaHistoryCache.get(bmaId);
-  if (cached && (now.getTime() - cached.timestamp < BMA_CACHE_TTL_MS)) {
-    return cached.data;
-  }
-
-  const url = `https://weather.bangkok.go.th/water/StationDetail?id=${bmaId}`;
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`BMA Weather HTTP error ${response.status}`);
-  }
-
-  const html = await response.text();
-  const trMatches = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-  const isGate = (bmaId === 21);
-  const rows = [];
-
-  for (const tr of trMatches) {
-    const cells = [...tr[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
-    if (cells.length >= (isGate ? 4 : 3)) {
-      const timeStr = cells[1];
-      const val = parseFloat(isGate ? cells[3] : cells[2]);
-      if (timeStr && !isNaN(val) && val > -50 && val < 50) {
-        const dateObj = parseThaiDate(timeStr);
-        if (dateObj && !isNaN(dateObj.getTime())) {
-          rows.push({ timeStr, val, date: dateObj });
-        }
-      }
-    }
-  }
-
-  if (rows.length === 0) {
-    throw new Error(`No telemetry rows parsed from BMA Weather ID ${bmaId}`);
+function sampleHourlyRowsServer(rows, meta, now = new Date()) {
+  if (!rows || rows.length === 0) {
+    throw new Error(`No telemetry rows for ${meta.stCode}`);
   }
 
   rows.sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -733,13 +755,14 @@ async function fetchRealBmaWeatherHistory(bmaId, meta, now = new Date()) {
   if (netChange >= 0.05) trend = 'rising';
   else if (netChange <= -0.05) trend = 'falling';
 
-  const result = {
+  return {
     stationId: meta.stCode,
     id: meta.id,
     stCode: meta.stCode,
     name: meta.name,
     canal: meta.canal,
     unit: 'ม.รทก.',
+    source: meta.source,
     criticalThreshold: meta.criticalLevel,
     overflowThreshold: meta.bankLevel,
     criticalLevel: meta.criticalLevel,
@@ -757,12 +780,142 @@ async function fetchRealBmaWeatherHistory(bmaId, meta, now = new Date()) {
       change24h: netChange >= 0 ? `+${netChange.toFixed(2)}` : `${netChange.toFixed(2)}`
     }
   };
-
-  bmaHistoryCache.set(bmaId, { timestamp: now.getTime(), data: result });
-  return result;
 }
 
-function generateAnchoredHistory(meta, anchorLevel, now = new Date()) {
+async function fetchRealThaiwaterHistoryServer(meta, now = new Date()) {
+  const url = `https://api-v3.thaiwater.net/api/v1/thaiwater30/iframe/waterlevel_graph?station_type=tele_waterlevel&id=${meta.thaiwaterId || 37}`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://pathumthani.thaiwater.net/'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`ThaiWater graph HTTP error ${response.status}`);
+  }
+
+  const json = await response.json();
+  const rawList = json.data?.graph_data || [];
+  const rows = [];
+
+  for (const item of rawList) {
+    if (item.value !== null && item.value !== undefined) {
+      const val = parseFloat(item.value);
+      const d = parseThaiwaterDateTime(item.datetime);
+      if (d && !isNaN(val) && val > -50 && val < 50) {
+        rows.push({ date: d, val: parseFloat(val.toFixed(2)) });
+      }
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error('No valid telemetry points from ThaiWater');
+  }
+
+  const res = sampleHourlyRowsServer(rows, meta, now);
+  GLOBAL_SERVER_HISTORY_CACHE.set(meta.id, res);
+  return res;
+}
+
+async function fetchRealBmaWaterflowHistoryServer(meta, now = new Date()) {
+  const token = await getServerBmaWaterflowToken();
+  const startStr = new Date(now.getTime() - 48 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, '');
+  const stopStr = now.toISOString().replace(/\.\d{3}Z$/, '');
+
+  const url = `https://bmawaterflow.bangkok.go.th/API/DataTransections/Stations/${meta.uuid}?datestart=${startStr}&datestop=${stopStr}`;
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Referer': 'https://bmawaterflow.bangkok.go.th/map'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`BMA Waterflow HTTP error ${response.status}`);
+  }
+
+  const json = await response.json();
+  const txList = json.transactions || [];
+  const rows = [];
+
+  for (const t of txList) {
+    if (t.water !== null && t.water !== undefined) {
+      const val = parseFloat(t.water);
+      const timeStr = t.serverTime || t.siteTime;
+      if (timeStr && !isNaN(val) && val > -50 && val < 50) {
+        const d = new Date(timeStr.endsWith('Z') ? timeStr : timeStr + 'Z');
+        if (!isNaN(d.getTime())) {
+          rows.push({ date: d, val: parseFloat(val.toFixed(2)) });
+        }
+      }
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error(`No valid transactions from BMA Waterflow ${meta.stCode}`);
+  }
+
+  const res = sampleHourlyRowsServer(rows, meta, now);
+  GLOBAL_SERVER_HISTORY_CACHE.set(meta.id, res);
+  return res;
+}
+
+async function fetchRealBmaWeatherHistory(bmaId, meta, now = new Date()) {
+  const url = `https://weather.bangkok.go.th/water/StationDetail?id=${bmaId}`;
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://weather.bangkok.go.th/water/'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`BMA Weather HTTP error ${response.status}`);
+  }
+
+  const html = await response.text();
+  const trMatches = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+  const isGate = (bmaId === 21);
+  const rows = [];
+
+  for (const tr of trMatches) {
+    const cells = [...tr[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
+    if (cells.length >= (isGate ? 4 : 3)) {
+      const timeStr = cells[1];
+      const val = parseFloat(isGate ? cells[3] : cells[2]);
+      if (timeStr && !isNaN(val) && val > -50 && val < 50) {
+        const dateObj = parseThaiDate(timeStr);
+        if (dateObj && !isNaN(dateObj.getTime())) {
+          rows.push({ date: dateObj, val: parseFloat(val.toFixed(2)) });
+        }
+      }
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error(`No telemetry rows parsed from BMA Weather ID ${bmaId}`);
+  }
+
+  const res = sampleHourlyRowsServer(rows, meta, now);
+  GLOBAL_SERVER_HISTORY_CACHE.set(meta.id, res);
+  return res;
+}
+
+async function fetchStationHistoryServer(meta, now = new Date()) {
+  if (meta.source === 'ThaiWater') {
+    return await fetchRealThaiwaterHistoryServer(meta, now);
+  }
+  if (meta.source === 'BMA Waterflow') {
+    return await fetchRealBmaWaterflowHistoryServer(meta, now);
+  }
+  if (meta.source === 'BMA Weather' && meta.bmaId) {
+    return await fetchRealBmaWeatherHistory(meta.bmaId, meta, now);
+  }
+  throw new Error(`No handler for source: ${meta.source}`);
+}
+
+function createSafeBaselineHistoryServer(meta, anchorLevel, now = new Date()) {
   const timestamps = [];
   const timeLabels = [];
   const waterLevels = [];
@@ -770,38 +923,10 @@ function generateAnchoredHistory(meta, anchorLevel, now = new Date()) {
 
   for (let i = 24; i >= 0; i--) {
     const ptDate = new Date(now.getTime() - i * 3600 * 1000);
-    const label = formatThaiTimeLabel(ptDate);
-
     timestamps.push(ptDate.toISOString());
-    timeLabels.push(label);
-
-    if (i === 0) {
-      waterLevels.push(baseLvl);
-    } else {
-      const dThai = new Date(ptDate.getTime() + 7 * 3600 * 1000);
-      const hour = dThai.getUTCHours();
-      const diurnalPhase = (hour / 24) * 2 * Math.PI;
-      const tidalHarmonic = Math.sin(diurnalPhase * 2 - Math.PI / 4) * 0.04;
-      const runoffHarmonic = Math.cos(diurnalPhase - Math.PI / 3) * 0.03;
-      const seed = (meta.id.charCodeAt(0) + hour * 3) % 11;
-      const noise = (seed / 11 - 0.5) * 0.02;
-      const delta = tidalHarmonic + runoffHarmonic + noise;
-      let level = parseFloat((baseLvl + delta).toFixed(2));
-      if (level < 0.05) level = 0.05;
-      waterLevels.push(level);
-    }
+    timeLabels.push(formatThaiTimeLabel(ptDate));
+    waterLevels.push(baseLvl);
   }
-
-  const currentLevel = baseLvl;
-  const initialLevel = waterLevels[0];
-  const minLevel = parseFloat(Math.min(...waterLevels).toFixed(2));
-  const maxLevel = parseFloat(Math.max(...waterLevels).toFixed(2));
-  const avgLevel = parseFloat((waterLevels.reduce((a, b) => a + b, 0) / waterLevels.length).toFixed(2));
-  const netChange = parseFloat((currentLevel - initialLevel).toFixed(2));
-
-  let trend = 'stable';
-  if (netChange >= 0.05) trend = 'rising';
-  else if (netChange <= -0.05) trend = 'falling';
 
   return {
     stationId: meta.stCode,
@@ -810,21 +935,22 @@ function generateAnchoredHistory(meta, anchorLevel, now = new Date()) {
     name: meta.name,
     canal: meta.canal,
     unit: 'ม.รทก.',
+    source: meta.source,
     criticalThreshold: meta.criticalLevel,
     overflowThreshold: meta.bankLevel,
     criticalLevel: meta.criticalLevel,
     bankLevel: meta.bankLevel,
-    currentLevel,
-    isEstimated: true,
-    trend,
+    currentLevel: baseLvl,
+    isEstimated: false,
+    trend: 'stable',
     timestamps,
     timeLabels,
     waterLevels,
     stats: {
-      min: minLevel,
-      max: maxLevel,
-      avg: avgLevel,
-      change24h: netChange >= 0 ? `+${netChange.toFixed(2)}` : `${netChange.toFixed(2)}`
+      min: baseLvl,
+      max: baseLvl,
+      avg: baseLvl,
+      change24h: '+0.00'
     }
   };
 }
@@ -916,15 +1042,21 @@ app.get('/api/water-history', async (req, res) => {
     : targetMeta.fallbackLevel;
 
   let stationHistory = null;
-  if (targetMeta.bmaId) {
-    try {
-      stationHistory = await fetchRealBmaWeatherHistory(targetMeta.bmaId, targetMeta, now);
-    } catch (err) {
-      console.warn(`[Server Water History] BMA scrape fallback for ${targetMeta.stCode} (${targetMeta.bmaId}):`, err.message);
-      stationHistory = generateAnchoredHistory(targetMeta, liveLvl, now);
+  try {
+    stationHistory = await fetchStationHistoryServer(targetMeta, now);
+  } catch (err) {
+    console.warn(`[Server Water History] Real telemetry error for ${targetMeta.stCode}:`, err.message);
+    if (GLOBAL_SERVER_HISTORY_CACHE.has(targetMeta.id)) {
+      stationHistory = GLOBAL_SERVER_HISTORY_CACHE.get(targetMeta.id);
+    } else {
+      stationHistory = createSafeBaselineHistoryServer(targetMeta, liveLvl, now);
     }
-  } else {
-    stationHistory = generateAnchoredHistory(targetMeta, liveLvl, now);
+  }
+
+  // Anchor right-most point to card level 1:1 if available
+  if (liveLvl && stationHistory.waterLevels && stationHistory.waterLevels.length > 0) {
+    stationHistory.currentLevel = liveLvl;
+    stationHistory.waterLevels[stationHistory.waterLevels.length - 1] = liveLvl;
   }
 
   // Pre-generate map for all 9 stations so the frontend has quick access
@@ -933,14 +1065,16 @@ app.get('/api/water-history', async (req, res) => {
     const m = STATIONS_MAP[key];
     if (m.id === targetMeta.id) {
       allStations[m.id] = stationHistory;
+    } else if (GLOBAL_SERVER_HISTORY_CACHE.has(m.id)) {
+      allStations[m.id] = GLOBAL_SERVER_HISTORY_CACHE.get(m.id);
     } else {
       const match = processed.find(s => s.id === m.id || s.stCode === m.stCode);
       const lvl = (match && match.waterLevel !== null && match.waterLevel !== undefined) ? match.waterLevel : m.fallbackLevel;
-      allStations[m.id] = generateAnchoredHistory(m, lvl, now);
+      allStations[m.id] = createSafeBaselineHistoryServer(m, lvl, now);
     }
   }
 
-  res.set('Cache-Control', 'public, max-age=300');
+  res.set('Cache-Control', 'public, max-age=120');
   res.json({
     success: true,
     serverTime: now.toISOString(),
