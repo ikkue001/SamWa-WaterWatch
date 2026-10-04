@@ -3517,10 +3517,10 @@ function renderFallbackPinnedCard(canon, idx) {
 
       <!-- Card Footer -->
       <div class="mt-3 pt-2 border-t border-slate-800/80 flex flex-col gap-2 text-[11px] text-slate-300 w-full shrink-0">
-        <div class="text-[11px] text-slate-400 font-mono flex items-center gap-1.5 whitespace-nowrap">
+        <div class="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
           <span>🕒</span>
           <span>เวลา:</span>
-          <b data-station-time="${id}" class="text-slate-300 font-medium">${formatCardDateTime(canon.timestamp || canon.updatedAt || canon.time)}</b>
+          <b data-station-time="${id}" class="text-slate-300 font-medium">${formatCardDateTime(canon.timestamp || canon.updatedAt || canon.time || '-')}</b>
         </div>
         <div class="grid grid-cols-2 gap-2 w-full">
           <button type="button" onclick="event.stopPropagation(); focusStationOnMap('${id}')" aria-label="ดูตำแหน่ง ${name} บนแผนที่" class="py-1 px-2 min-h-[44px] bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded border border-slate-700/80 flex items-center justify-center gap-1 transition touch-manipulation whitespace-nowrap" title="ดูตำแหน่งบนแผนที่">
