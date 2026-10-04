@@ -624,18 +624,38 @@ function applyDataUpdate(data) {
  * @param {number} critical ระดับวิกฤติ (ม.รทก.)
  * @param {number} overflow ระดับตลิ่ง (ม.รทก.)
  * @param {number|undefined} base ระดับท้องคลอง (ถ้ามี)
+ * @param {number|undefined} warning ระดับเตือนภัย (ถ้ามี)
  * @returns {{ waterPct: number, criticalPct: number, overflowPct: number }}
  */
-function calculateGaugePcts(current, critical, overflow, base) {
-  const minLevel = base !== undefined ? base : (critical - 1.2);
-  const maxLevel = overflow + 0.2;
-  const totalRange = maxLevel - minLevel;
+function calculateGaugePcts(current, critical, overflow, base, warning) {
+  const crit = Number(critical);
+  const over = Number(overflow);
+  const cur = (current !== null && current !== undefined && Number.isFinite(Number(current)))
+    ? Number(current)
+    : null;
 
-  // คำนวณ % จากด้านล่าง (bottom)
-  const cur = (current !== null && current !== undefined && !isNaN(parseFloat(current))) ? parseFloat(current) : null;
-  const waterPct = cur !== null ? Math.min(100, Math.max(5, ((cur - minLevel) / totalRange) * 100)) : 5;
-  const criticalPct = Math.min(95, Math.max(10, ((critical - minLevel) / totalRange) * 100));
-  const overflowPct = Math.min(95, Math.max(15, ((overflow - minLevel) / totalRange) * 100));
+  // กำหนดช่วงสเกลอ้างอิงของสถานี
+  // minVal: กำหนดให้ต่ำกว่าเกณฑ์เตือนภัย/วิกฤติลงไปอย่างน้อย 0.5 - 0.8 ม.
+  const baseWarning = (warning !== undefined && Number.isFinite(Number(warning)))
+    ? Number(warning)
+    : (crit - 0.4);
+
+  // minVal: อ้างอิงจุดต่ำสุดโดยคำนึงถึงทั้งระดับน้ำปัจจุบัน และเกณฑ์เตือนภัย
+  let minVal = Math.min(cur !== null ? cur : baseWarning, baseWarning) - 0.3;
+  if (base !== undefined && Number.isFinite(Number(base)) && Number(base) < minVal) {
+    minVal = Number(base);
+  }
+
+  // maxVal: กำหนดให้สูงกว่าระดับตลิ่งขึ้นไปเล็กน้อย เพื่อให้เห็นขอบตลิ่ง
+  const maxVal = over + 0.15;
+  const range = Math.max(maxVal - minVal, 0.2);
+
+  // คำนวณเป็น % จากฐานล่าง (0% ถึง 100%)
+  const toPct = (val) => Math.min(100, Math.max(0, ((val - minVal) / range) * 100));
+
+  const waterPct = cur !== null ? toPct(cur) : 5;
+  const criticalPct = toPct(crit);
+  const overflowPct = toPct(over);
 
   return { waterPct, criticalPct, overflowPct };
 }
@@ -660,13 +680,13 @@ function updateExistingCardsIfPresent(stations) {
         const inCrit = parseFloat(station.inside?.critical ?? (inBank * 0.85));
         const rawInLvl = station.inside?.level ?? station.inside?.waterLevel ?? null;
         const inLvl = (rawInLvl !== null && rawInLvl !== undefined && !isNaN(parseFloat(rawInLvl))) ? parseFloat(rawInLvl) : null;
-        const inPcts = calculateGaugePcts(inLvl, inCrit, inBank, station.inside?.baseLevel);
+        const inPcts = calculateGaugePcts(inLvl, inCrit, inBank, station.inside?.baseLevel, station.inside?.warning);
 
         const outBank = parseFloat(station.outside?.bank ?? 1.70);
         const outCrit = parseFloat(station.outside?.critical ?? (outBank * 0.85));
         const rawOutLvl = station.outside?.level ?? station.outside?.waterLevel ?? null;
         const outLvl = (rawOutLvl !== null && rawOutLvl !== undefined && !isNaN(parseFloat(rawOutLvl))) ? parseFloat(rawOutLvl) : null;
-        const outPcts = calculateGaugePcts(outLvl, outCrit, outBank, station.outside?.baseLevel);
+        const outPcts = calculateGaugePcts(outLvl, outCrit, outBank, station.outside?.baseLevel, station.outside?.warning);
 
         let inFillGrad = 'from-cyan-600 to-cyan-400';
         if (station.inside?.isOverflow) inFillGrad = 'from-rose-600 to-red-500';
@@ -735,7 +755,7 @@ function updateExistingCardsIfPresent(stations) {
       const rawLevel = station.waterLevel ?? station.level ?? station.inside?.level ?? null;
       const hasValidLevel = rawLevel !== null && rawLevel !== undefined && rawLevel !== '' && !isNaN(parseFloat(rawLevel));
       const levelNum = hasValidLevel ? parseFloat(rawLevel) : null;
-      const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(levelNum, critical, bank, station.baseLevel);
+      const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(levelNum, critical, bank, station.baseLevel, station.warningLevel);
 
       let fillGrad = 'from-cyan-600 to-cyan-400';
       let statusClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
@@ -3225,7 +3245,7 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
   const critical = parseFloat(station.criticalLevel || 1.8);
   const overflow = bank;
   const level = (station.waterLevel !== null && station.waterLevel !== undefined) ? parseFloat(station.waterLevel) : null;
-  const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(level, critical, overflow, station.baseLevel);
+  const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(level, critical, overflow, station.baseLevel, station.warningLevel);
 
   let waterGrad = 'from-cyan-600 to-cyan-400';
   if (isDanger) {
@@ -3295,7 +3315,6 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
 
         <!-- Gauge Bar (Click to view 24h history chart) -->
         <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${station.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${station.id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${station.name}" class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 mb-3 cursor-pointer group hover:border-sky-400/50 transition" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม.">
-          <span class="absolute top-1 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-900/80 text-sky-300 border border-sky-500/20 group-hover:border-sky-400/60 transition shadow-xs z-20">📈 24 ชม.</span>
           <!-- เส้นขีดตลิ่ง (สีแดง) -->
           <div data-station-overflow-line="${station.id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${overflowPct}%">
             <span data-station-overflow-label="${station.id}" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${overflow.toFixed(2)}m</span>
@@ -3370,7 +3389,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const inLevel = (inside.level !== null && inside.level !== undefined) ? parseFloat(inside.level) : null;
   const inBank = parseFloat(inside.bank || 1.30);
   const inCritical = parseFloat(inside.critical || 0.80);
-  const inPcts = calculateGaugePcts(inLevel, inCritical, inBank, inside.baseLevel);
+  const inPcts = calculateGaugePcts(inLevel, inCritical, inBank, inside.baseLevel, inside.warning);
   const inIsDanger = inside.isOverflow;
   const inIsWarning = inside.isWarning;
 
@@ -3389,7 +3408,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const outLevel = (outside.level !== null && outside.level !== undefined) ? parseFloat(outside.level) : null;
   const outBank = parseFloat(outside.bank || 1.70);
   const outCritical = parseFloat(outside.critical || 1.30);
-  const outPcts = calculateGaugePcts(outLevel, outCritical, outBank, outside.baseLevel);
+  const outPcts = calculateGaugePcts(outLevel, outCritical, outBank, outside.baseLevel, outside.warning);
   const outIsDanger = outside.isOverflow;
   const outIsWarning = outside.isWarning;
 
@@ -3680,7 +3699,8 @@ function renderPinnedPriorityCard(station, canon, idx) {
     }
 
     const base = station?.baseLevel ?? canon?.baseLevel;
-    const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(levelNum, critical, overflow, base);
+    const warningLvl = station?.warningLevel ?? canon?.warningLevel;
+    const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(levelNum, critical, overflow, base, warningLvl);
     const diffText = formatFriendlyDiffText(levelNum, bank, critical);
 
     const distanceBadge = (station?.distanceKm !== null && station?.distanceKm !== undefined)
@@ -3761,7 +3781,6 @@ function renderPinnedPriorityCard(station, canon, idx) {
             <!-- Mini vertical gauge (Click to view 24h history chart) -->
             <div class="col-span-5 flex flex-col items-center">
               <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${canon.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${canon.id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${station?.name ?? canon.name}" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-                <span class="absolute top-1 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-900/80 text-sky-300 border border-sky-500/20 group-hover:border-sky-400/60 transition shadow-xs z-20">📈 24 ชม.</span>
                 <!-- เส้นขีดตลิ่ง (สีแดง) -->
                 <div data-station-overflow-line="${canon.id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${overflowPct}%">
                   <span data-station-overflow-label="${canon.id}" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${overflow.toFixed(2)}m</span>
@@ -3818,7 +3837,7 @@ function renderFallbackPinnedCard(canon, idx) {
   const critical = parseFloat(canon?.criticalLevel ?? 1.8);
   const overflow = bank;
   const base = canon?.baseLevel;
-  const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(null, critical, overflow, base);
+  const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(null, critical, overflow, base, canon?.warningLevel);
   const lat = canon?.lat ?? 13.93;
   const lng = canon?.lng ?? 100.75;
 
@@ -3880,7 +3899,6 @@ function renderFallbackPinnedCard(canon, idx) {
 
           <div class="col-span-5 flex flex-col items-center">
             <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${name}" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-              <span class="absolute top-1 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-900/80 text-sky-300 border border-sky-500/20 group-hover:border-sky-400/60 transition shadow-xs z-20">📈 24 ชม.</span>
               <!-- เส้นขีดตลิ่ง (สีแดง) -->
               <div data-station-overflow-line="${id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${overflowPct}%">
                 <span data-station-overflow-label="${id}" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${overflow.toFixed(2)}m</span>
