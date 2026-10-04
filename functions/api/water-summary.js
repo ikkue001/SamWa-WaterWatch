@@ -154,7 +154,13 @@ const STATIONS_MASTER_CONFIG = [
     sourceUrl: 'https://weather.bangkok.go.th/water/StationDetail?id=124',
     defaultBank: 1.3,
     defaultWarning: 0.7,
-    defaultCritical: 0.8
+    defaultCritical: 0.8,
+    isWaterGate: true,
+    bedLevel: -1.64,
+    thresholds: {
+      in: { warning: 0.70, critical: 0.80, overflow: 1.30 },
+      out: { warning: 1.10, critical: 1.30, overflow: 1.70 }
+    }
   },
   {
     id: 'bma_weather_127',
@@ -535,12 +541,16 @@ async function fetchBmaWeather(configs) {
         return m ? m[1].trim() : null;
       }
 
-      let insideBank = parseFloat(extractInputValue(html, 'txt_left_bank')) || 1.30;
-      let outsideBank = parseFloat(extractInputValue(html, 'txt_right_bank')) || 1.70;
-      let insideWarning = parseFloat(extractInputValue(html, 'txt_warning')) || 0.70;
-      let insideCritical = parseFloat(extractInputValue(html, 'txt_critical')) || 0.80;
-      let outsideWarning = parseFloat(extractInputValue(html, 'txt_warning_out01')) || 1.10;
-      let outsideCritical = parseFloat(extractInputValue(html, 'txt_critical_out01')) || 1.30;
+      const gateThresholds = cfg.thresholds || {
+        in: { warning: 0.70, critical: 0.80, overflow: 1.30 },
+        out: { warning: 1.10, critical: 1.30, overflow: 1.70 }
+      };
+      const insideBank = gateThresholds.in.overflow;
+      const outsideBank = gateThresholds.out.overflow;
+      const insideWarning = gateThresholds.in.warning;
+      const insideCritical = gateThresholds.in.critical;
+      const outsideWarning = gateThresholds.out.warning;
+      const outsideCritical = gateThresholds.out.critical;
 
       let gateOpening = null;
       const gateMatch = html.match(/(?:ระยะเปิดประตู|เปิดบาน|บานประตูเปิด|ยกบาน|gateOpening|opening)[^\d]*([0-9]+(?:\.[0-9]+)?)/i);
@@ -667,6 +677,9 @@ async function fetchBmaWeather(configs) {
       results.push({
         ...cfg,
         isGate: true,
+        isWaterGate: true,
+        bedLevel: cfg.bedLevel,
+        thresholds: gateThresholds,
         inside: insideObj,
         outside: outsideObj,
         gateOpening,

@@ -1297,17 +1297,23 @@ function drawStationPopupSparkline(station, values = getPopupHistoryValues(stati
   const xStep = (width - padding.left - padding.right) / (outsideValues.length - 1);
   const y = value => padding.top + (1 - ((value - min) / range)) * (height - padding.top - padding.bottom);
 
-  const critical = Number(station.criticalLevel);
-  if (Number.isFinite(critical) && critical >= min && critical <= max) {
-    ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+  const thresholdLines = station.isGate && station.thresholds
+    ? [
+      { value: station.thresholds.in.critical, color: 'rgba(251, 146, 60, 0.85)' },
+      { value: station.thresholds.out.critical, color: 'rgba(248, 113, 113, 0.85)' }
+    ]
+    : [{ value: Number(station.criticalLevel), color: 'rgba(251, 191, 36, 0.75)' }];
+  thresholdLines.forEach(line => {
+    if (!Number.isFinite(Number(line.value)) || line.value < min || line.value > max) return;
+    ctx.strokeStyle = line.color;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
-    ctx.moveTo(padding.left, y(critical));
-    ctx.lineTo(width - padding.right, y(critical));
+    ctx.moveTo(padding.left, y(line.value));
+    ctx.lineTo(width - padding.right, y(line.value));
     ctx.stroke();
     ctx.setLineDash([]);
-  }
+  });
 
   const drawLine = (lineValues, color) => {
     if (lineValues.length < 2) return;
@@ -1543,11 +1549,11 @@ function updateMapMarkers() {
         <div class="grid grid-cols-2 gap-1.5 text-[10px] mb-2 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
           <div>
             <div class="text-slate-400 font-semibold">เกณฑ์ฝั่งใน:</div>
-            <div class="text-slate-300">วิกฤติ <b class="text-amber-300 font-mono">${station.inside.critical}m</b> / ตลิ่ง <b class="font-mono">${station.inside.bank}m</b></div>
+            <div class="text-slate-300">เตือนภัย <b class="text-yellow-300 font-mono">${station.inside.warning.toFixed(2)} ม.</b> | วิกฤติ <b class="text-amber-300 font-mono">${station.inside.critical.toFixed(2)} ม.</b> | ตลิ่ง <b class="font-mono">${station.inside.bank.toFixed(2)} ม.</b></div>
           </div>
           <div>
             <div class="text-slate-400 font-semibold">เกณฑ์ฝั่งนอก:</div>
-            <div class="text-slate-300">วิกฤติ <b class="text-amber-300 font-mono">${station.outside.critical}m</b> / ตลิ่ง <b class="font-mono">${station.outside.bank}m</b></div>
+            <div class="text-slate-300">เตือนภัย <b class="text-yellow-300 font-mono">${station.outside.warning.toFixed(2)} ม.</b> | วิกฤติ <b class="text-amber-300 font-mono">${station.outside.critical.toFixed(2)} ม.</b> | ตลิ่ง <b class="font-mono">${station.outside.bank.toFixed(2)} ม.</b></div>
           </div>
         </div>
       `;
@@ -3153,7 +3159,10 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
               </div>
 
               <!-- Inside Thresholds -->
-              <div class="grid grid-cols-2 gap-1 text-[10px] text-center">
+              <div class="grid grid-cols-3 gap-1 text-[10px] text-center">
+                <div class="bg-black/30 p-1 rounded border border-white/5">
+                  <span class="text-slate-400">เตือนภัย:</span> <b class="text-yellow-300 font-mono">${Number(inside.warning ?? 0.70).toFixed(2)}m</b>
+                </div>
                 <div class="bg-black/30 p-1 rounded border border-white/5">
                   <span class="text-slate-400">วิกฤติ:</span> <b class="text-amber-300 font-mono">${inCritical.toFixed(2)}m</b>
                 </div>
@@ -3228,7 +3237,10 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
               </div>
 
               <!-- Outside Thresholds -->
-              <div class="grid grid-cols-2 gap-1 text-[10px] text-center">
+              <div class="grid grid-cols-3 gap-1 text-[10px] text-center">
+                <div class="bg-black/30 p-1 rounded border border-white/5">
+                  <span class="text-slate-400">เตือนภัย:</span> <b class="text-yellow-300 font-mono">${Number(outside.warning ?? 1.10).toFixed(2)}m</b>
+                </div>
                 <div class="bg-black/30 p-1 rounded border border-white/5">
                   <span class="text-slate-400">วิกฤติ:</span> <b class="text-amber-300 font-mono">${outCritical.toFixed(2)}m</b>
                 </div>
@@ -4551,6 +4563,20 @@ function renderWaterHistoryChart(stationId, liveData) {
   const bankVal = st.overflowThreshold ?? st.bankLevel ?? 2.0;
   const criticalArr = new Array(st.waterLevels.length).fill(criticalVal);
   const bankArr = new Array(st.waterLevels.length).fill(bankVal);
+  const gateThresholds = isWaterGate ? (st.thresholds || {
+    in: { warning: 0.70, critical: 0.80, overflow: 1.30 },
+    out: { warning: 1.10, critical: 1.30, overflow: 1.70 }
+  }) : null;
+  const gateThresholdDataset = (label, value, color) => ({
+    label: `${label} (${Number(value).toFixed(2)} ม.)`,
+    data: new Array(st.waterLevels.length).fill(value),
+    borderColor: color,
+    borderWidth: 1.5,
+    borderDash: [5, 5],
+    pointRadius: 0,
+    fill: false,
+    tension: 0
+  });
 
   const ctx = canvas.getContext('2d');
   const gradient = ctx.createLinearGradient(0, 0, 0, 260);
@@ -4594,7 +4620,14 @@ function renderWaterHistoryChart(stationId, liveData) {
           pointBorderColor: '#f3e8ff',
           pointBorderWidth: 1.5
         }] : []),
-        {
+        ...(isWaterGate ? [
+          gateThresholdDataset('เตือนภัยด้านใน', gateThresholds.in.warning, '#facc15'),
+          gateThresholdDataset('วิกฤติด้านใน', gateThresholds.in.critical, '#fb923c'),
+          gateThresholdDataset('ตลิ่งด้านใน', gateThresholds.in.overflow, '#f87171'),
+          gateThresholdDataset('เตือนภัยด้านนอก', gateThresholds.out.warning, '#fde68a'),
+          gateThresholdDataset('วิกฤติด้านนอก', gateThresholds.out.critical, '#fca5a5'),
+          gateThresholdDataset('ตลิ่งด้านนอก', gateThresholds.out.overflow, '#ef4444')
+        ] : [{
           label: `เกณฑ์วิกฤติ (${criticalVal.toFixed(2)} ม.)`,
           data: criticalArr,
           borderColor: '#fbbf24',
@@ -4603,8 +4636,7 @@ function renderWaterHistoryChart(stationId, liveData) {
           pointRadius: 0,
           fill: false,
           tension: 0
-        },
-        {
+        }, {
           label: `ระดับตลิ่ง (${bankVal.toFixed(2)} ม.)`,
           data: bankArr,
           borderColor: '#ef4444',
@@ -4613,7 +4645,7 @@ function renderWaterHistoryChart(stationId, liveData) {
           pointRadius: 0,
           fill: false,
           tension: 0
-        }
+        }])
       ]
     },
     options: {
@@ -4675,6 +4707,8 @@ function renderWaterHistoryChart(stationId, liveData) {
           }
         },
         y: {
+          min: isWaterGate ? 0.50 : undefined,
+          max: isWaterGate ? 1.80 : undefined,
           grid: {
             color: 'rgba(255, 255, 255, 0.06)',
             drawBorder: false
