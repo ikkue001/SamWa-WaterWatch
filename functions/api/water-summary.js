@@ -226,6 +226,40 @@ const COMMON_HEADERS = {
 };
 
 /**
+ * Format water difference into friendly conversational Thai for citizens
+ * e.g. "ต่ำกว่าตลิ่ง 28 ซม.", "เกินระดับวิกฤติ 12 ซม. (เฝ้าระวัง)", "ล้นตลิ่ง 10 ซม."
+ */
+function formatFriendlyDiff(waterLevel, bankLevel, criticalLevel) {
+  if (waterLevel === null || waterLevel === undefined || isNaN(waterLevel)) {
+    return 'รอข้อมูลตรวจวัด';
+  }
+  const lvl = parseFloat(waterLevel);
+  const bank = parseFloat(bankLevel);
+  const crit = criticalLevel !== null && criticalLevel !== undefined && !isNaN(parseFloat(criticalLevel)) ? parseFloat(criticalLevel) : null;
+
+  if (!isNaN(bank) && lvl >= bank) {
+    const diff = parseFloat((lvl - bank).toFixed(2));
+    const cm = Math.round(diff * 100);
+    if (cm === 0) return 'แตะระดับตลิ่งพอดี (เสี่ยงล้น)';
+    return diff < 1.0 ? `ล้นตลิ่ง ${cm} ซม.` : `ล้นตลิ่ง ${diff.toFixed(2)} ม.`;
+  }
+
+  if (crit !== null && lvl >= crit) {
+    const diffCrit = parseFloat((lvl - crit).toFixed(2));
+    const cmCrit = Math.round(diffCrit * 100);
+    return diffCrit < 1.0 ? `เกินระดับวิกฤติ ${cmCrit} ซม. (เฝ้าระวัง)` : `เกินระดับวิกฤติ ${diffCrit.toFixed(2)} ม. (เฝ้าระวัง)`;
+  }
+
+  if (!isNaN(bank)) {
+    const diffBank = parseFloat((bank - lvl).toFixed(2));
+    const cmBank = Math.round(diffBank * 100);
+    return diffBank < 1.0 ? `ต่ำกว่าตลิ่ง ${cmBank} ซม.` : `ต่ำกว่าตลิ่ง ${diffBank.toFixed(2)} ม.`;
+  }
+
+  return 'ระดับปกติ';
+}
+
+/**
  * 1. Fetch Thaiwater Station (ST-1)
  */
 async function fetchThaiwater(cfg) {
@@ -296,14 +330,7 @@ async function fetchThaiwater(cfg) {
   const diff = parseFloat((waterLevel - bankLevel).toFixed(2));
   const diffCritical = parseFloat((waterLevel - criticalLevel).toFixed(2));
 
-  let diffText = '';
-  if (diff >= 0) {
-    diffText = `ล้นตลิ่ง +${diff.toFixed(2)} ม.`;
-  } else if (diffCritical >= 0) {
-    diffText = `+${diffCritical.toFixed(2)} ม. (เกินเกณฑ์วิกฤติ)`;
-  } else {
-    diffText = `ต่ำกว่าตลิ่ง ${Math.abs(diff).toFixed(2)} ม.`;
-  }
+  const diffText = formatFriendlyDiff(waterLevel, bankLevel, criticalLevel);
 
   return {
     ...cfg,
@@ -422,14 +449,7 @@ async function fetchBmaWaterflow(configs) {
     const diff = parseFloat((waterLevel - bankLevel).toFixed(2));
     const diffCritical = parseFloat((waterLevel - criticalLevel).toFixed(2));
 
-    let diffText = '';
-    if (diff >= 0) {
-      diffText = `ล้นตลิ่ง +${diff.toFixed(2)} ม.`;
-    } else if (diffCritical >= 0) {
-      diffText = `+${diffCritical.toFixed(2)} ม. (เกินเกณฑ์วิกฤติ)`;
-    } else {
-      diffText = `ต่ำกว่าตลิ่ง ${Math.abs(diff).toFixed(2)} ม.`;
-    }
+    const diffText = formatFriendlyDiff(waterLevel, bankLevel, criticalLevel);
 
     results.push({
       ...cfg,
@@ -558,7 +578,8 @@ async function fetchBmaWeather(configs) {
         statusText: inOverflow ? 'ล้นตลิ่ง' : (inCritical ? 'วิกฤติ' : (inWarning ? 'เฝ้าระวัง' : 'ปกติ')),
         statusSeverity: inOverflow ? 'danger' : (inCritical ? 'warning' : (inWarning ? 'warning' : 'normal')),
         diffBank: parseFloat((insideLevel - insideBank).toFixed(2)),
-        diffCritical: parseFloat((insideLevel - insideCritical).toFixed(2))
+        diffCritical: parseFloat((insideLevel - insideCritical).toFixed(2)),
+        diffText: formatFriendlyDiff(insideLevel, insideBank, insideCritical)
       };
 
       const outsideObj = {
@@ -572,7 +593,8 @@ async function fetchBmaWeather(configs) {
         statusText: outOverflow ? 'ล้นตลิ่ง' : (outCritical ? 'วิกฤติ' : (outWarning ? 'เฝ้าระวัง' : 'ปกติ')),
         statusSeverity: outOverflow ? 'danger' : (outCritical ? 'warning' : (outWarning ? 'warning' : 'normal')),
         diffBank: parseFloat((outsideLevel - outsideBank).toFixed(2)),
-        diffCritical: parseFloat((outsideLevel - outsideCritical).toFixed(2))
+        diffCritical: parseFloat((outsideLevel - outsideCritical).toFixed(2)),
+        diffText: formatFriendlyDiff(outsideLevel, outsideBank, outsideCritical)
       };
 
       const isOverflow = inOverflow || outOverflow;
@@ -739,14 +761,7 @@ async function fetchBmaWeather(configs) {
       const diff = parseFloat((waterLevel - bankLevel).toFixed(2));
       const diffCritical = parseFloat((waterLevel - criticalLevel).toFixed(2));
 
-      let diffText = '';
-      if (diff >= 0) {
-        diffText = `ล้นตลิ่ง +${diff.toFixed(2)} ม.`;
-      } else if (diffCritical >= 0) {
-        diffText = `+${diffCritical.toFixed(2)} ม. (เกินเกณฑ์วิกฤติ)`;
-      } else {
-        diffText = `ต่ำกว่าตลิ่ง ${Math.abs(diff).toFixed(2)} ม.`;
-      }
+      const diffText = formatFriendlyDiff(waterLevel, bankLevel, criticalLevel);
 
       results.push({
         ...cfg,

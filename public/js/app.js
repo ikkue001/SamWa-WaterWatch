@@ -447,26 +447,7 @@ function initRealtimeSSE() {
 function updateRealtimeBadge(status) {
   const badge = document.getElementById('realtimeConnectionBadge');
   if (!badge) return;
-
-  if (status === 'connected' || status === 'edge_live') {
-    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0 whitespace-nowrap';
-    badge.innerHTML = `
-      <span class="relative flex h-2 w-2 items-center justify-center shrink-0">
-        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]"></span>
-      </span>
-      <span class="font-medium">${status === 'edge_live' ? 'Edge Live' : 'Live'}</span>
-    `;
-  } else if (status === 'connecting') {
-    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 shrink-0 whitespace-nowrap';
-    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-spin"></span> <span class="font-medium">ต่อ...</span>';
-  } else if (status === 'disconnected') {
-    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 shrink-0 whitespace-nowrap';
-    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> <span class="font-medium">ตัดการต่อ</span>';
-  } else {
-    badge.className = 'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 shrink-0 whitespace-nowrap';
-    badge.innerHTML = '<span>Edge</span>';
-  }
+  badge.classList.add('hidden');
 }
 
 /**
@@ -560,14 +541,9 @@ function updateExistingCardsIfPresent(stations) {
         document.querySelectorAll(`[data-station-inside-level="${station.id}"]`).forEach(el => {
           el.textContent = rawInLvl !== null && rawInLvl !== undefined && !isNaN(parseFloat(rawInLvl)) ? parseFloat(rawInLvl).toFixed(2) : '--';
         });
+        const inCrit = parseFloat(station.inside?.critical ?? (inBank * 0.85));
         document.querySelectorAll(`[data-station-inside-diff="${station.id}"]`).forEach(el => {
-          if (station.inside?.diffCritical !== undefined && station.inside.diffCritical >= 0) {
-            el.textContent = `+${parseFloat(station.inside.diffCritical).toFixed(2)}ม. (เกินวิกฤติ)`;
-          } else if (station.inside?.diffBank !== undefined) {
-            el.textContent = `${parseFloat(station.inside.diffBank).toFixed(2)}ม. ถึงตลิ่ง`;
-          } else {
-            el.textContent = station.inside?.diffText || 'ปกติ';
-          }
+          el.textContent = formatFriendlyDiffText(rawInLvl, inBank, inCrit) || station.inside?.diffText || 'ปกติ';
         });
 
         // Outside elements
@@ -579,14 +555,9 @@ function updateExistingCardsIfPresent(stations) {
         document.querySelectorAll(`[data-station-outside-level="${station.id}"]`).forEach(el => {
           el.textContent = rawOutLvl !== null && rawOutLvl !== undefined && !isNaN(parseFloat(rawOutLvl)) ? parseFloat(rawOutLvl).toFixed(2) : '--';
         });
+        const outCrit = parseFloat(station.outside?.critical ?? (outBank * 0.85));
         document.querySelectorAll(`[data-station-outside-diff="${station.id}"]`).forEach(el => {
-          if (station.outside?.diffCritical !== undefined && station.outside.diffCritical >= 0) {
-            el.textContent = `+${parseFloat(station.outside.diffCritical).toFixed(2)}ม. (เกินวิกฤติ)`;
-          } else if (station.outside?.diffBank !== undefined) {
-            el.textContent = `${parseFloat(station.outside.diffBank).toFixed(2)}ม. ถึงตลิ่ง`;
-          } else {
-            el.textContent = station.outside?.diffText || 'ปกติ';
-          }
+          el.textContent = formatFriendlyDiffText(rawOutLvl, outBank, outCrit) || station.outside?.diffText || 'ปกติ';
         });
 
         // Gate Diff & Opening
@@ -637,8 +608,10 @@ function updateExistingCardsIfPresent(stations) {
       });
 
       // Update diff text and color
+      const crit = parseFloat(station.criticalLevel || (bank * 0.85));
+      const friendlyDiff = hasValidLevel ? formatFriendlyDiffText(levelNum, bank, crit) : 'รอข้อมูลตรวจวัด';
       document.querySelectorAll(`[data-station-diff="${station.id}"]`).forEach(el => {
-        el.textContent = station.diffText || (hasValidLevel ? '' : 'รอข้อมูลตรวจวัด');
+        el.textContent = friendlyDiff || station.diffText || (hasValidLevel ? '' : 'รอข้อมูลตรวจวัด');
         el.className = `text-[11px] mt-1 font-semibold ${diffClass} truncate`;
       });
 
@@ -840,10 +813,13 @@ function setUserCoordinates(lat, lng, sourceLabel = 'พิกัด GPS') {
 
   const gpsBtnText = document.getElementById('gpsBtnText');
   const gpsStatusIcon = document.getElementById('gpsStatusIcon');
-  if (gpsBtnText) gpsBtnText.textContent = `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+  const btnGpsRefresh = document.getElementById('btnGpsRefresh');
+
+  if (gpsBtnText) gpsBtnText.textContent = 'ย่านคลองสามวา / พระยาสุเรนทร์';
+  if (btnGpsRefresh) btnGpsRefresh.title = `📍 ตำแหน่ง: ย่านคลองสามวา / พระยาสุเรนทร์ (${lat.toFixed(4)}, ${lng.toFixed(4)}) - แตะเพื่ออัปเดต GPS`;
   if (gpsStatusIcon) {
     gpsStatusIcon.classList.remove('animate-spin');
-    gpsStatusIcon.setAttribute('data-lucide', 'locate-fixed');
+    gpsStatusIcon.setAttribute('data-lucide', 'map-pin');
   }
 
   console.log(`[User Location]: ${sourceLabel} lat: ${lat.toFixed(4)}, lng: ${lng.toFixed(4)}`);
@@ -874,7 +850,7 @@ function initGeolocation(isManual = false) {
   const gpsStatusIcon = document.getElementById('gpsStatusIcon');
 
   if (!navigator.geolocation) {
-    if (gpsBtnText) gpsBtnText.textContent = 'GPS ไม่รองรับ';
+    if (gpsBtnText) gpsBtnText.textContent = 'ย่านคลองสามวา / พระยาสุเรนทร์';
     return;
   }
 
@@ -882,14 +858,14 @@ function initGeolocation(isManual = false) {
   const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (!isSecure) {
     console.warn('[Geolocation]: Browser requires HTTPS to access Geolocation API');
-    if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
+    if (gpsBtnText) gpsBtnText.textContent = 'ย่านคลองสามวา / พระยาสุเรนทร์';
     if (isManual) {
       alert('⚠️ ระบบต้องการการเชื่อมต่อแบบ HTTPS เพื่อใช้งานพิกัด GPS\nกรุณาเข้าใช้งานผ่าน https:// เพื่อให้เบราว์เซอร์อนุญาตพิกัดตำแหน่ง');
     }
     return;
   }
 
-  if (gpsBtnText) gpsBtnText.textContent = 'หาพิกัด...';
+  if (gpsBtnText) gpsBtnText.textContent = 'กำลังหาพิกัด...';
   if (gpsStatusIcon) gpsStatusIcon.classList.add('animate-spin');
 
   navigator.geolocation.getCurrentPosition(
@@ -901,15 +877,10 @@ function initGeolocation(isManual = false) {
       console.warn('[GPS Geolocation Error]:', error.code, error.message);
       if (gpsStatusIcon) gpsStatusIcon.classList.remove('animate-spin');
 
-      if (error.code === error.PERMISSION_DENIED) {
-        if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
-        if (isManual) {
-          alert('📍 ยังไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง:\nกรุณากด "อนุญาต (Allow)" ในการตั้งค่าเบราว์เซอร์ เพื่อคำนวณระยะห่างจากสถานีตรวจวัดน้ำใกล้คุณ');
-        }
-      } else if (error.code === error.TIMEOUT) {
-        if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
-      } else {
-        if (gpsBtnText) gpsBtnText.textContent = '13.926, 100.707';
+      if (gpsBtnText) gpsBtnText.textContent = 'ย่านคลองสามวา / พระยาสุเรนทร์';
+
+      if (error.code === error.PERMISSION_DENIED && isManual) {
+        alert('📍 ยังไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง:\nกรุณากด "อนุญาต (Allow)" ในการตั้งค่าเบราว์เซอร์ เพื่อคำนวณระยะห่างจากสถานีตรวจวัดน้ำใกล้คุณ');
       }
 
       recalculateDistances();
@@ -1231,17 +1202,17 @@ function updateMapMarkers() {
             <!-- ด้านใน -->
             <div class="p-1.5 rounded-lg bg-black/40 border border-white/5">
               <div class="text-[10px] font-bold text-sky-300">🌊 ฝั่งด้านใน</div>
-              <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${station.inside.level !== null && station.inside.level !== undefined ? station.inside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-slate-400">ม.</span></div>
+              <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${station.inside.level !== null && station.inside.level !== undefined ? station.inside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-slate-400 cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span></div>
               <div class="text-[9px] font-semibold ${station.inside.isOverflow ? 'text-red-400' : (station.inside.isWarning ? 'text-amber-400' : 'text-emerald-400')}">
-                ${station.inside.statusText} (${station.inside.diffCritical >= 0 ? `+${station.inside.diffCritical.toFixed(2)}` : `${station.inside.diffBank.toFixed(2)}`})
+                ${station.inside.statusText} (${formatFriendlyDiffText(station.inside.level, station.inside.bank, station.inside.critical)})
               </div>
             </div>
             <!-- ด้านนอก -->
             <div class="p-1.5 rounded-lg bg-black/40 border border-white/5">
               <div class="text-[10px] font-bold text-purple-300">🌊 ฝั่งด้านนอก</div>
-              <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${station.outside.level !== null && station.outside.level !== undefined ? station.outside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-slate-400">ม.</span></div>
+              <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${station.outside.level !== null && station.outside.level !== undefined ? station.outside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-slate-400 cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span></div>
               <div class="text-[9px] font-semibold ${station.outside.isOverflow ? 'text-red-400' : (station.outside.isWarning ? 'text-amber-400' : 'text-emerald-400')}">
-                ${station.outside.statusText} (${station.outside.diffCritical >= 0 ? `+${station.outside.diffCritical.toFixed(2)}` : `${station.outside.diffBank.toFixed(2)}`})
+                ${station.outside.statusText} (${formatFriendlyDiffText(station.outside.level, station.outside.bank, station.outside.critical)})
               </div>
             </div>
           </div>
@@ -1288,10 +1259,10 @@ function updateMapMarkers() {
             <span class="text-2xl font-black text-white font-mono-numbers">
               ${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'}
             </span>
-            <span class="text-xs text-slate-400">ม.รทก.</span>
+            <span class="text-xs text-slate-400 cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
           </div>
           <div class="text-[11px] font-semibold mt-0.5 ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')}">
-            ${station.diffText || ''}
+            ${formatFriendlyDiffText(station.waterLevel, station.bankLevel, station.criticalLevel)}
           </div>
           <!-- Official Source Link -->
           <div class="mt-2 pt-1.5 border-t border-white/10 text-center">
@@ -1305,11 +1276,11 @@ function updateMapMarkers() {
         <div class="grid grid-cols-2 gap-1.5 text-[11px] mb-2 bg-slate-900/50 p-2 rounded-lg border border-slate-800">
           <div>
             <span class="text-slate-400">ระดับวิกฤติ:</span>
-            <b class="ml-1 text-amber-300 font-mono">${station.criticalLevel} ม.รทก.</b>
+            <b class="ml-1 text-amber-300 font-mono">${station.criticalLevel} <span class="text-[10px] text-slate-400 font-normal cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span></b>
           </div>
           <div>
             <span class="text-slate-400">ระดับตลิ่ง:</span>
-            <b class="ml-1 text-slate-200 font-mono">${station.bankLevel} ม.รทก.</b>
+            <b class="ml-1 text-slate-200 font-mono">${station.bankLevel} <span class="text-[10px] text-slate-400 font-normal cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span></b>
           </div>
         </div>
       `;
@@ -1618,10 +1589,186 @@ function getTargetAlertReason(station) {
 }
 
 /**
- * REFACTORED ALERT BANNERS:
- * Filters ALL stations in the system (not just hardcoded 3 targets).
- * Separates into 2 groups:
- * 1. Nearby Critical (distance <= 5.0 km)
+ * Format water difference into friendly, conversational Thai for citizens
+ * e.g. "ต่ำกว่าตลิ่ง 28 ซม.", "เกินระดับวิกฤติ 12 ซม. (เฝ้าระวัง)", "ล้นตลิ่ง 10 ซม."
+ */
+function formatFriendlyDiffText(waterLevel, bankLevel, criticalLevel) {
+  if (waterLevel === null || waterLevel === undefined || waterLevel === '' || isNaN(parseFloat(waterLevel))) {
+    return 'รอข้อมูลตรวจวัด';
+  }
+  const lvl = parseFloat(waterLevel);
+  const bank = parseFloat(bankLevel);
+  const crit = criticalLevel !== null && criticalLevel !== undefined && !isNaN(parseFloat(criticalLevel)) ? parseFloat(criticalLevel) : null;
+
+  // Case 1: Overflow (waterLevel >= bankLevel)
+  if (!isNaN(bank) && lvl >= bank) {
+    const diff = parseFloat((lvl - bank).toFixed(2));
+    const cm = Math.round(diff * 100);
+    if (cm === 0) return 'แตะระดับตลิ่งพอดี (เสี่ยงล้น)';
+    return diff < 1.0 ? `ล้นตลิ่ง ${cm} ซม.` : `ล้นตลิ่ง ${diff.toFixed(2)} ม.`;
+  }
+
+  // Case 2: Exceeded Critical Level but not bank (waterLevel >= criticalLevel)
+  if (crit !== null && lvl >= crit) {
+    const diffCrit = parseFloat((lvl - crit).toFixed(2));
+    const cmCrit = Math.round(diffCrit * 100);
+    return diffCrit < 1.0 ? `เกินระดับวิกฤติ ${cmCrit} ซม. (เฝ้าระวัง)` : `เกินระดับวิกฤติ ${diffCrit.toFixed(2)} ม. (เฝ้าระวัง)`;
+  }
+
+  // Case 3: Normal / Safe (Below both bank and critical)
+  if (!isNaN(bank)) {
+    const diffBank = parseFloat((bank - lvl).toFixed(2));
+    const cmBank = Math.round(diffBank * 100);
+    return diffBank < 1.0 ? `ต่ำกว่าตลิ่ง ${cmBank} ซม.` : `ต่ำกว่าตลิ่ง ${diffBank.toFixed(2)} ม.`;
+  }
+
+  return 'ระดับปกติ';
+}
+window.formatFriendlyDiffText = formatFriendlyDiffText;
+
+/**
+ * 3-Second Quick Glance Hero Status Summary Card
+ * Visual tiers: 🟢 Normal, 🟡/🟠 Warning, 🔴 Emergency
+ */
+function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations) {
+  const card = document.getElementById('heroStatusCard');
+  const iconWrap = document.getElementById('heroStatusIconWrap');
+  const icon = document.getElementById('heroStatusIcon');
+  const badge = document.getElementById('heroStatusBadge');
+  const headline = document.getElementById('heroStatusHeadline');
+  const subtitle = document.getElementById('heroStatusSubtitle');
+  const counters = document.getElementById('heroStatusCounters');
+  const glow = document.getElementById('heroStatusGlow');
+
+  if (!card || !headline) return;
+
+  const totalStations = (appState.stations && appState.stations.length > 0) ? appState.stations.length : 9;
+  const overflowCount = (liveOverflowAll || []).length;
+  const criticalCount = (liveCriticalAll || []).length;
+  const staleCount = (staleStations || []).length;
+  const normalCount = Math.max(0, totalStations - overflowCount - criticalCount - staleCount);
+
+  if (overflowCount > 0) {
+    // 🔴 TIER 3: EMERGENCY (เตือนภัยระดับสูง)
+    card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-2xl relative overflow-hidden bg-gradient-to-r from-red-950/90 via-slate-900/90 to-slate-900/95 border-red-500/60 shadow-red-500/20 emergency-border-pulse';
+    if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-red-500/20 rounded-full blur-3xl pointer-events-none animate-pulse';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-red-500/30 border border-red-400/60 text-red-200 flex items-center justify-center shrink-0 shadow-lg shadow-red-500/30 text-2xl select-none animate-pulse';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'alert-octagon');
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-red-300';
+    }
+    if (badge) {
+      badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-red-500/30 text-red-200 border border-red-400/60 font-mono shadow-sm animate-pulse';
+      badge.textContent = '🔴 สถานการณ์: เตือนภัยระดับสูง';
+    }
+    headline.textContent = 'เตือนภัยระดับสูง — เสี่ยงน้ำล้นตลิ่งในพื้นที่ลุ่มต่ำ';
+    headline.className = 'text-base sm:text-lg md:text-xl font-black text-red-200 tracking-tight leading-snug';
+
+    if (subtitle) {
+      const names = liveOverflowAll.map(s => s.stCode || s.name).slice(0, 3).join(', ');
+      subtitle.textContent = `ตรวจพบ ${overflowCount} จุดน้ำล้นตลิ่งแล้ว (${names})! ให้เร่งขนย้ายทรัพย์สินขึ้นที่สูงทันที`;
+      subtitle.className = 'text-xs sm:text-sm text-red-300 mt-0.5 flex items-center gap-1.5 flex-wrap font-medium';
+    }
+
+    if (counters) {
+      counters.innerHTML = `
+        <div class="px-3 py-1.5 rounded-xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs font-black flex items-center gap-1.5 whitespace-nowrap shadow-md animate-pulse">
+          <span class="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+          <span>🚨 ล้นตลิ่ง ${overflowCount} จุด</span>
+        </div>
+        ${criticalCount > 0 ? `
+          <div class="px-3 py-1.5 rounded-xl bg-amber-950/70 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+            <span>⚠️ วิกฤติ ${criticalCount} จุด</span>
+          </div>
+        ` : ''}
+        <a href="tel:1784" class="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 text-white text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm transition touch-manipulation">
+          <i data-lucide="phone-call" class="w-3.5 h-3.5"></i>
+          <span>ปภ. 1784</span>
+        </a>
+      `;
+    }
+
+  } else if (criticalCount > 0) {
+    // 🟡/🟠 TIER 2: WARNING (เฝ้าระวัง)
+    card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-amber-950/80 via-slate-900/90 to-slate-900/95 border-amber-500/50 shadow-amber-500/10';
+    if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-amber-500/15 rounded-full blur-3xl pointer-events-none';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-amber-500/20 border border-amber-400/50 text-amber-300 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 text-2xl select-none';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'alert-triangle');
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-amber-300';
+    }
+    if (badge) {
+      badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 border border-amber-400/50 font-mono shadow-sm';
+      badge.textContent = '🟡 สถานการณ์: เฝ้าระวังระดับน้ำ';
+    }
+    headline.textContent = `เฝ้าระวัง ${criticalCount} จุด — คลองพระยาสุเรนทร์น้ำสูง แต่ยังไม่ล้นตลิ่ง`;
+    headline.className = 'text-base sm:text-lg md:text-xl font-black text-amber-200 tracking-tight leading-snug';
+
+    if (subtitle) {
+      subtitle.textContent = `ระดับน้ำเข้าใกล้เกณฑ์วิกฤติในบางจุด ให้เตรียมความพร้อม/ยกของขึ้นที่สูง และระวังฝนตกสะสม`;
+      subtitle.className = 'text-xs sm:text-sm text-slate-300 mt-0.5 flex items-center gap-1.5 flex-wrap';
+    }
+
+    if (counters) {
+      counters.innerHTML = `
+        <div class="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/50 text-amber-300 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>เฝ้าระวัง ${criticalCount} จุด</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>ปกติ ${normalCount} จุด</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-amber-200 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+          <i data-lucide="package" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>เตรียมยกของขึ้นที่สูง</span>
+        </div>
+      `;
+    }
+
+  } else {
+    // 🟢 TIER 1: NORMAL (ปกติ)
+    card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-slate-900/95 border-emerald-500/40';
+    if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/15 text-2xl select-none';
+    if (icon) {
+      icon.setAttribute('data-lucide', 'shield-check');
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-emerald-400';
+    }
+    if (badge) {
+      badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-mono';
+      badge.textContent = '🟢 สถานการณ์ภาพรวม: ปกติ';
+    }
+    headline.textContent = 'ทุกสายคลองยังต่ำกว่าตลิ่ง ระบายน้ำได้ดี';
+    headline.className = 'text-base sm:text-lg md:text-xl font-black text-white tracking-tight leading-snug';
+
+    if (subtitle) {
+      subtitle.textContent = staleCount > 0
+        ? `ระดับน้ำทุกจุดที่ส่งข้อมูลอยู่ในเกณฑ์ควบคุม การระบายน้ำคลองหกวาและคลองพระยาสุเรนทร์คล่องตัว (มีเซนเซอร์ ${staleCount} จุดกำลังซ่อมบำรุง)`
+        : 'ระดับน้ำทั้ง 9 จุดตรวจวัดหลักอยู่ในเกณฑ์ควบคุม การระบายน้ำคลองหกวาและคลองพระยาสุเรนทร์คล่องตัว';
+      subtitle.className = 'text-xs sm:text-sm text-slate-300 mt-0.5 flex items-center gap-1.5 flex-wrap';
+    }
+
+    if (counters) {
+      counters.innerHTML = `
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>ปกติ ${normalCount}/${totalStations} จุด</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-300 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+          <i data-lucide="droplets" class="w-3.5 h-3.5 text-sky-400"></i>
+          <span>ระบายน้ำคล่องตัว</span>
+        </div>
+      `;
+    }
+  }
+}
+window.updateHeroStatusSummary = updateHeroStatusSummary;
+
+/**
+ * Enhanced Two-Tier + Overflow Visual Alert Handler
+ * Coordinates:
+ * 1. Total Overflow (system-wide)
  * 2. Total Critical (system-wide)
  * Renders all nearby critical cards in 1-col mobile / 2-col PC grid.
  * Provides expandable toggle for outside 5km critical stations.
@@ -1665,6 +1812,9 @@ function handleTwoTierAlerts() {
   const staleStations = appState.stations.filter(s => s.isStale);
   const staleCount = staleStations.length;
   const staleBadgeHtml = `⚠️ มี ${staleCount} สถานีที่เซนเซอร์หยุดส่งข้อมูล`;
+
+  // Always update 3-Second Quick Glance Hero Summary Card
+  updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations);
 
   // Update stale badges on all banners
   if (emergencyStaleBadge) {
@@ -1984,17 +2134,17 @@ function renderAlertStationCards(stations, tier) {
             <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/10 text-center">
               <div class="bg-black/30 p-2 rounded-lg border border-white/5">
                 <div class="text-[10px] font-bold text-sky-300">🌊 ฝั่งด้านใน</div>
-                <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${s.inside.level !== null ? s.inside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-white/70">ม.</span></div>
+                <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${s.inside.level !== null ? s.inside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-white/70 cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span></div>
                 <div class="text-[9px] font-bold mt-0.5 ${s.inside.isOverflow ? 'text-red-300' : (s.inside.isWarning ? 'text-amber-300' : 'text-emerald-300')}">
-                  ${s.inside.statusText} (${s.inside.diffCritical >= 0 ? `+${s.inside.diffCritical.toFixed(2)}m` : `${s.inside.diffBank.toFixed(2)}m`})
+                  ${formatFriendlyDiffText(s.inside.level, s.inside.bank, s.inside.critical)}
                 </div>
               </div>
 
               <div class="bg-black/30 p-2 rounded-lg border border-white/5">
                 <div class="text-[10px] font-bold text-purple-300">🌊 ฝั่งด้านนอก</div>
-                <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${s.outside.level !== null ? s.outside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-white/70">ม.</span></div>
+                <div class="text-xl font-black text-white font-mono-numbers mt-0.5">${s.outside.level !== null ? s.outside.level.toFixed(2) : '--'} <span class="text-[10px] font-normal text-white/70 cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span></div>
                 <div class="text-[9px] font-bold mt-0.5 ${s.outside.isOverflow ? 'text-red-300' : (s.outside.isWarning ? 'text-amber-300' : 'text-emerald-300')}">
-                  ${s.outside.statusText} (${s.outside.diffCritical >= 0 ? `+${s.outside.diffCritical.toFixed(2)}m` : `${s.outside.diffBank.toFixed(2)}m`})
+                  ${formatFriendlyDiffText(s.outside.level, s.outside.bank, s.outside.critical)}
                 </div>
               </div>
             </div>
@@ -2035,11 +2185,12 @@ function renderAlertStationCards(stations, tier) {
     let isCritExceeded = false;
     if (s.waterLevel !== null && s.criticalLevel !== null) {
       const dCrit = parseFloat((s.waterLevel - s.criticalLevel).toFixed(2));
+      const cmCrit = Math.round(Math.abs(dCrit) * 100);
       if (dCrit >= 0) {
-        diffCritStr = `+${dCrit.toFixed(2)} ม. (เกินเกณฑ์วิกฤติ)`;
+        diffCritStr = dCrit < 1.0 ? `เกินระดับวิกฤติ ${cmCrit} ซม.` : `เกินระดับวิกฤติ ${dCrit.toFixed(2)} ม.`;
         isCritExceeded = true;
       } else {
-        diffCritStr = `${dCrit.toFixed(2)} ม. ถึงเกณฑ์วิกฤติ`;
+        diffCritStr = Math.abs(dCrit) < 1.0 ? `อีก ${cmCrit} ซม. ถึงเกณฑ์วิกฤติ` : `อีก ${Math.abs(dCrit).toFixed(2)} ม. ถึงเกณฑ์วิกฤติ`;
       }
     }
 
@@ -2048,11 +2199,12 @@ function renderAlertStationCards(stations, tier) {
     let isBankOverflow = false;
     if (s.waterLevel !== null && s.bankLevel !== null) {
       const dBank = parseFloat((s.waterLevel - s.bankLevel).toFixed(2));
+      const cmBank = Math.round(Math.abs(dBank) * 100);
       if (dBank >= 0) {
-        diffBankStr = `+${dBank.toFixed(2)} ม. ล้นตลิ่งแล้ว!`;
+        diffBankStr = dBank < 1.0 ? `ล้นตลิ่ง ${cmBank} ซม.!` : `ล้นตลิ่ง ${dBank.toFixed(2)} ม.!`;
         isBankOverflow = true;
       } else {
-        diffBankStr = `${dBank.toFixed(2)} ม. ถึงตลิ่ง`;
+        diffBankStr = Math.abs(dBank) < 1.0 ? `ต่ำกว่าตลิ่ง ${cmBank} ซม.` : `ต่ำกว่าตลิ่ง ${Math.abs(dBank).toFixed(2)} ม.`;
       }
     }
 
@@ -2086,7 +2238,7 @@ function renderAlertStationCards(stations, tier) {
               <span class="text-2xl sm:text-3xl font-black text-white font-mono-numbers">
                 ${(s.waterLevel !== null && s.waterLevel !== undefined) ? s.waterLevel.toFixed(2) : '--'}
               </span>
-              <span class="text-xs text-white/70">ม.รทก.</span>
+              <span class="text-[10px] sm:text-xs text-white/70 cursor-help" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
             </div>
             ${s.isStale ? '<span class="text-[10px] text-amber-300 font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">🕒 (ข้อมูลเดิม)</span>' : ''}
           </div>
@@ -2379,9 +2531,12 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
     fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
   }
 
-  const bank = station.bankLevel || 2.0;
-  const level = station.waterLevel !== null ? station.waterLevel : 0;
-  const fillPct = Math.min(100, Math.max(10, Math.round((level / bank) * 80)));
+  const bank = parseFloat(station.bankLevel || 2.0);
+  const critical = parseFloat(station.criticalLevel || 1.8);
+  const level = (station.waterLevel !== null && station.waterLevel !== undefined) ? parseFloat(station.waterLevel) : null;
+  const bankLinePct = 80;
+  const critLinePct = Math.min(78, Math.max(20, Math.round((critical / bank) * 80)));
+  const fillPct = level !== null ? Math.min(100, Math.max(8, Math.round((level / bank) * 80))) : 40;
 
   const isNearest = appState.nearestStation && appState.nearestStation.id === station.id;
   const stCode = station.stCode || badgeCode || '';
@@ -2434,23 +2589,22 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
               <span data-station-level="${station.id}" class="text-2xl sm:text-3xl font-black text-white font-mono-numbers">
                 ${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'}
               </span>
-              <span class="text-xs text-slate-400">ม.รทก.</span>
+              <span class="text-[10px] sm:text-xs text-slate-400 font-normal cursor-help border-b border-dotted border-slate-600 hover:text-sky-300 transition" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
             </div>
-            <span data-station-stale-pill="${station.id}" class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 ${station.isStale ? '' : 'hidden'}">🕒 (ข้อมูลเดิม)</span>
           </div>
           <div data-station-diff="${station.id}" class="text-[11px] mt-1 font-semibold ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')} truncate">
-            ${station.diffText || ''}
+            ${formatFriendlyDiffText(station.waterLevel, station.bankLevel, station.criticalLevel)}
           </div>
         </div>
 
         <!-- Gauge Bar (Click to view 24h history chart) -->
         <div onclick="event.stopPropagation(); viewStationHistory('${station.id}')" class="w-full h-24 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1 relative shadow-inner mb-3 cursor-pointer group hover:border-sky-400/50 transition" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม.">
           <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-900/80 text-sky-300 border border-sky-500/20 group-hover:border-sky-400/60 transition shadow-xs z-20">📈 24 ชม.</span>
-          <div class="bank-marker-line" style="bottom: 78%;">
-            <span class="bank-marker-label">ตลิ่ง ${station.bankLevel}m</span>
+          <div class="bank-marker-line" style="bottom: ${bankLinePct}%;">
+            <span class="bank-marker-label">🚨 ขีดตลิ่ง ${bank.toFixed(2)}ม.</span>
           </div>
-          <div class="critical-marker-line" style="bottom: 58%;">
-            <span class="critical-marker-label">วิกฤติ ${station.criticalLevel}m</span>
+          <div class="critical-marker-line" style="bottom: ${critLinePct}%;">
+            <span class="critical-marker-label">⚠️ ขีดวิกฤติ ${critical.toFixed(2)}ม.</span>
           </div>
           <div class="water-wave-fill ${fillGrad}" data-station-fill="${station.id}" data-target-height="${fillPct}" style="height: 0%;">
             <div class="water-surface-line"></div>
@@ -2460,10 +2614,10 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
         <!-- Thresholds -->
         <div class="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300">
           <div class="bg-slate-900/50 p-1.5 rounded border border-slate-800">
-            <span class="text-slate-400">วิกฤติ:</span> <b class="font-mono text-amber-300">${station.criticalLevel}ม.</b>
+            <span class="text-slate-400">วิกฤติ:</span> <b class="font-mono text-amber-300">${critical.toFixed(2)}ม.</b>
           </div>
           <div class="bg-slate-900/50 p-1.5 rounded border border-slate-800">
-            <span class="text-slate-400">ตลิ่ง:</span> <b class="font-mono text-slate-200">${station.bankLevel}ม.</b>
+            <span class="text-slate-400">ตลิ่ง:</span> <b class="font-mono text-slate-200">${bank.toFixed(2)}ม.</b>
           </div>
         </div>
       </div>
@@ -2515,7 +2669,9 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const inLevel = inside.level !== null && inside.level !== undefined ? inside.level : 0;
   const inBank = inside.bank || 1.30;
   const inCritical = inside.critical || 0.80;
-  const inFillPct = Math.min(100, Math.max(10, Math.round((inLevel / inBank) * 80)));
+  const inBankLinePct = 80;
+  const inCritLinePct = Math.min(78, Math.max(20, Math.round((inCritical / inBank) * 80)));
+  const inFillPct = Math.min(100, Math.max(8, Math.round((inLevel / inBank) * 80)));
   const inIsDanger = inside.isOverflow;
   const inIsWarning = inside.isWarning;
 
@@ -2534,7 +2690,9 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const outLevel = outside.level !== null && outside.level !== undefined ? outside.level : 0;
   const outBank = outside.bank || 1.70;
   const outCritical = outside.critical || 1.30;
-  const outFillPct = Math.min(100, Math.max(10, Math.round((outLevel / outBank) * 80)));
+  const outBankLinePct = 80;
+  const outCritLinePct = Math.min(78, Math.max(20, Math.round((outCritical / outBank) * 80)));
+  const outFillPct = Math.min(100, Math.max(8, Math.round((outLevel / outBank) * 80)));
   const outIsDanger = outside.isOverflow;
   const outIsWarning = outside.isWarning;
 
@@ -2616,20 +2774,20 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
                   <span data-station-inside-level="${station.id}" class="text-2xl sm:text-3xl font-black text-white font-mono-numbers">
                     ${inside.level !== null && inside.level !== undefined ? inside.level.toFixed(2) : '--'}
                   </span>
-                  <span class="text-[11px] text-slate-400">ม.รทก.</span>
+                  <span class="text-[10px] sm:text-xs text-slate-400 font-normal cursor-help border-b border-dotted border-slate-600 hover:text-sky-300 transition" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
                 </div>
                 <div data-station-inside-diff="${station.id}" class="text-[10px] mt-0.5 font-medium ${inside.isOverflow ? 'text-red-400' : (inside.isWarning ? 'text-amber-400' : 'text-emerald-400')} truncate">
-                  ${inside.diffCritical >= 0 ? `+${inside.diffCritical.toFixed(2)}ม. (เกินวิกฤติ)` : `${inside.diffBank.toFixed(2)}ม. ถึงตลิ่ง`}
+                  ${formatFriendlyDiffText(inside.level, inBank, inCritical)}
                 </div>
               </div>
 
               <!-- Inside Gauge -->
               <div class="w-full h-28 sm:h-32 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1 relative shadow-inner mb-2">
-                <div class="bank-marker-line" style="bottom: 78%;">
-                  <span class="bank-marker-label">ตลิ่ง ${inside.bank}m</span>
+                <div class="bank-marker-line" style="bottom: ${inBankLinePct}%;">
+                  <span class="bank-marker-label">🚨 ขีดตลิ่ง ${inBank.toFixed(2)}m</span>
                 </div>
-                <div class="critical-marker-line" style="bottom: 58%;">
-                  <span class="critical-marker-label">วิกฤติ ${inside.critical}m</span>
+                <div class="critical-marker-line" style="bottom: ${inCritLinePct}%;">
+                  <span class="critical-marker-label">⚠️ ขีดวิกฤติ ${inCritical.toFixed(2)}m</span>
                 </div>
                 <div class="water-wave-fill ${inFillGrad}" data-station-inside-fill="${station.id}" data-target-height="${inFillPct}" style="height: 0%;">
                   <div class="water-surface-line"></div>
@@ -2639,10 +2797,10 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
               <!-- Inside Thresholds -->
               <div class="grid grid-cols-2 gap-1 text-[10px] text-center">
                 <div class="bg-black/30 p-1 rounded border border-white/5">
-                  <span class="text-slate-400">วิกฤติ:</span> <b class="text-amber-300 font-mono">${inside.critical}m</b>
+                  <span class="text-slate-400">วิกฤติ:</span> <b class="text-amber-300 font-mono">${inCritical.toFixed(2)}m</b>
                 </div>
                 <div class="bg-black/30 p-1 rounded border border-white/5">
-                  <span class="text-slate-400">ตลิ่ง:</span> <b class="text-slate-300 font-mono">${inside.bank}m</b>
+                  <span class="text-slate-400">ตลิ่ง:</span> <b class="text-slate-300 font-mono">${inBank.toFixed(2)}m</b>
                 </div>
               </div>
             </div>
@@ -2691,20 +2849,20 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
                   <span data-station-outside-level="${station.id}" class="text-2xl sm:text-3xl font-black text-white font-mono-numbers">
                     ${outside.level !== null && outside.level !== undefined ? outside.level.toFixed(2) : '--'}
                   </span>
-                  <span class="text-[11px] text-slate-400">ม.รทก.</span>
+                  <span class="text-[10px] sm:text-xs text-slate-400 font-normal cursor-help border-b border-dotted border-slate-600 hover:text-sky-300 transition" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
                 </div>
                 <div data-station-outside-diff="${station.id}" class="text-[10px] mt-0.5 font-medium ${outside.isOverflow ? 'text-red-400' : (outside.isWarning ? 'text-amber-400' : 'text-emerald-400')} truncate">
-                  ${outside.diffCritical >= 0 ? `+${outside.diffCritical.toFixed(2)}ม. (เกินวิกฤติ)` : `${outside.diffBank.toFixed(2)}ม. ถึงตลิ่ง`}
+                  ${formatFriendlyDiffText(outside.level, outBank, outCritical)}
                 </div>
               </div>
 
               <!-- Outside Gauge -->
               <div class="w-full h-28 sm:h-32 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1 relative shadow-inner mb-2">
-                <div class="bank-marker-line" style="bottom: 78%;">
-                  <span class="bank-marker-label">ตลิ่ง ${outside.bank}m</span>
+                <div class="bank-marker-line" style="bottom: ${outBankLinePct}%;">
+                  <span class="bank-marker-label">🚨 ขีดตลิ่ง ${outBank.toFixed(2)}m</span>
                 </div>
-                <div class="critical-marker-line" style="bottom: 58%;">
-                  <span class="critical-marker-label">วิกฤติ ${outside.critical}m</span>
+                <div class="critical-marker-line" style="bottom: ${outCritLinePct}%;">
+                  <span class="critical-marker-label">⚠️ ขีดวิกฤติ ${outCritical.toFixed(2)}m</span>
                 </div>
                 <div class="water-wave-fill ${outFillGrad}" data-station-outside-fill="${station.id}" data-target-height="${outFillPct}" style="height: 0%;">
                   <div class="water-surface-line"></div>
@@ -2714,10 +2872,10 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
               <!-- Outside Thresholds -->
               <div class="grid grid-cols-2 gap-1 text-[10px] text-center">
                 <div class="bg-black/30 p-1 rounded border border-white/5">
-                  <span class="text-slate-400">วิกฤติ:</span> <b class="text-amber-300 font-mono">${outside.critical}m</b>
+                  <span class="text-slate-400">วิกฤติ:</span> <b class="text-amber-300 font-mono">${outCritical.toFixed(2)}m</b>
                 </div>
                 <div class="bg-black/30 p-1 rounded border border-white/5">
-                  <span class="text-slate-400">ตลิ่ง:</span> <b class="text-slate-300 font-mono">${outside.bank}m</b>
+                  <span class="text-slate-400">ตลิ่ง:</span> <b class="text-slate-300 font-mono">${outBank.toFixed(2)}m</b>
                 </div>
               </div>
             </div>
@@ -2807,8 +2965,10 @@ function renderPinnedPriorityCard(station, canon, idx) {
       fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
     }
 
-    const fillPct = levelNum !== null ? Math.min(100, Math.max(10, Math.round((levelNum / bank) * 80))) : 50;
-    const diffText = station?.diffText ?? (!hasValidLevel ? 'รอข้อมูลตรวจวัด' : '');
+    const bankLinePct = 80;
+    const critLinePct = Math.min(78, Math.max(20, Math.round((critical / bank) * 80)));
+    const fillPct = levelNum !== null ? Math.min(100, Math.max(8, Math.round((levelNum / bank) * 80))) : 40;
+    const diffText = formatFriendlyDiffText(levelNum, bank, critical);
 
     const distanceBadge = (station?.distanceKm !== null && station?.distanceKm !== undefined)
       ? `<span data-station-dist="${canon.id}" class="distance-pill text-[11px] font-mono font-bold"><i data-lucide="navigation" class="w-3 h-3 text-sky-400"></i> ${station.distanceKm <= 5.0 ? '🟡 ' : ''}ห่าง ${formatDistance(station.distanceKm)}</span>`
@@ -2860,13 +3020,12 @@ function renderPinnedPriorityCard(station, canon, idx) {
               <div class="bg-slate-900/80 rounded-xl p-3 border border-slate-800">
                 <div class="flex items-center justify-between text-[11px] font-medium text-slate-400">
                   <span>ระดับน้ำปัจจุบัน</span>
-                  <span data-station-stale-pill="${canon.id}" class="text-[9px] text-amber-300 font-bold bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30 ${isStale ? '' : 'hidden'}">🕒 (ข้อมูลเดิม)</span>
                 </div>
                 <div class="flex items-baseline gap-1.5 mt-0.5">
                   <span data-station-level="${canon.id}" class="text-3xl font-black text-white font-mono-numbers">
                     ${levelDisplay}
                   </span>
-                  <span class="text-xs text-slate-400">ม.รทก.</span>
+                  <span class="text-[10px] sm:text-xs text-slate-400 font-normal cursor-help border-b border-dotted border-slate-600 hover:text-sky-300 transition" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
                 </div>
                 <div data-station-diff="${canon.id}" class="text-[11px] mt-1 font-semibold ${station?.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : (!hasValidLevel ? 'text-slate-400' : 'text-emerald-400'))} truncate">
                   ${diffText}
@@ -2890,11 +3049,11 @@ function renderPinnedPriorityCard(station, canon, idx) {
             <div class="col-span-5 flex flex-col items-center">
               <div onclick="event.stopPropagation(); viewStationHistory('${canon.id}')" class="w-full h-36 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1.5 relative shadow-inner cursor-pointer group hover:border-sky-400/50 transition" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม.">
                 <span class="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-900/80 text-sky-300 border border-sky-500/20 group-hover:border-sky-400/60 transition shadow-xs z-20">📈 24 ชม.</span>
-                <div class="bank-marker-line" style="bottom: 78%;">
-                  <span class="bank-marker-label">ตลิ่ง ${bank.toFixed(2)}m</span>
+                <div class="bank-marker-line" style="bottom: ${bankLinePct}%;">
+                  <span class="bank-marker-label">🚨 ขีดตลิ่ง ${bank.toFixed(2)}m</span>
                 </div>
-                <div class="critical-marker-line" style="bottom: 60%;">
-                  <span class="critical-marker-label">วิกฤติ ${critical.toFixed(2)}m</span>
+                <div class="critical-marker-line" style="bottom: ${critLinePct}%;">
+                  <span class="critical-marker-label">⚠️ ขีดวิกฤติ ${critical.toFixed(2)}m</span>
                 </div>
                 <div class="water-wave-fill ${fillGrad}" data-station-fill="${canon.id}" data-target-height="${fillPct}" style="height: ${fillPct}%;">
                   <div class="water-surface-line"></div>
@@ -2940,8 +3099,10 @@ function renderFallbackPinnedCard(canon, idx) {
   const id = canon?.id || 'unknown';
   const name = canon?.name || 'สถานีตรวจวัดระดับน้ำ';
   const location = canon?.location || 'รอยต่อปทุมธานี - กทม.';
-  const bank = canon?.bankLevel ?? 2.0;
-  const critical = canon?.criticalLevel ?? 1.8;
+  const bank = parseFloat(canon?.bankLevel ?? 2.0);
+  const critical = parseFloat(canon?.criticalLevel ?? 1.8);
+  const bankLinePct = 80;
+  const critLinePct = Math.min(78, Math.max(20, Math.round((critical / bank) * 80)));
   const lat = canon?.lat ?? 13.93;
   const lng = canon?.lng ?? 100.75;
 
@@ -2982,7 +3143,7 @@ function renderFallbackPinnedCard(canon, idx) {
               </div>
               <div class="flex items-baseline gap-1.5 mt-0.5">
                 <span data-station-level="${id}" class="text-3xl font-black text-white font-mono-numbers">--</span>
-                <span class="text-xs text-slate-400">ม.รทก.</span>
+                <span class="text-[10px] sm:text-xs text-slate-400 font-normal cursor-help border-b border-dotted border-slate-600 hover:text-sky-300 transition" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
               </div>
               <div data-station-diff="${id}" class="text-[11px] mt-1 font-semibold text-slate-400 truncate">
                 รอข้อมูลตรวจวัด
@@ -3003,15 +3164,21 @@ function renderFallbackPinnedCard(canon, idx) {
 
           <div class="col-span-5 flex flex-col items-center">
             <div class="w-full h-36 water-gauge-container border border-slate-700/80 flex flex-col justify-end p-1.5 relative shadow-inner">
-              <div class="bank-marker-line" style="bottom: 78%;">
-                <span class="bank-marker-label">ตลิ่ง ${typeof bank === 'number' ? bank.toFixed(2) : bank}m</span>
+              <div class="bank-marker-line" style="bottom: ${bankLinePct}%;">
+                <span class="bank-marker-label">🚨 ขีดตลิ่ง ${typeof bank === 'number' ? bank.toFixed(2) : bank}m</span>
               </div>
-              <div class="critical-marker-line" style="bottom: 60%;">
-                <span class="critical-marker-label">วิกฤติ ${typeof critical === 'number' ? critical.toFixed(2) : critical}m</span>
+              <div class="critical-marker-line" style="bottom: ${critLinePct}%;">
+                <span class="critical-marker-label">⚠️ ขีดวิกฤติ ${typeof critical === 'number' ? critical.toFixed(2) : critical}m</span>
               </div>
               <div class="water-wave-fill bg-gradient-to-t from-slate-700 to-slate-600" data-station-fill="${id}" data-target-height="50" style="height: 50%;">
                 <div class="water-surface-line"></div>
               </div>
+              <div data-station-level-sub="${id}" class="z-20 relative text-center text-[11px] font-mono font-bold text-white drop-shadow">
+                -- ม.
+              </div>
+            </div>
+          </div>
+        </div>
               <div data-station-level-sub="${id}" class="z-20 relative text-center text-[11px] font-mono font-bold text-white drop-shadow">
                 -- ม.
               </div>
@@ -3308,7 +3475,7 @@ function renderAiAnalysis(data) {
   }
 
   let badgeClass = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
-  let badgeLabel = 'ความเสี่ยง: ปกติ (Normal)';
+  let badgeLabel = 'ระดับความเสี่ยง: ปกติ';
   let bannerBorder = 'border-l-4 border-l-emerald-500 bg-emerald-950/20 border-emerald-500/30';
   let headlineClass = 'text-white';
   let riskIcon = 'check-circle';
@@ -3316,14 +3483,14 @@ function renderAiAnalysis(data) {
 
   if (risk === 'danger') {
     badgeClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
-    badgeLabel = 'ความเสี่ยง: วิกฤติ / อันตราย (Danger)';
+    badgeLabel = 'ระดับความเสี่ยง: วิกฤติ / อันตราย';
     bannerBorder = 'border-l-4 border-l-red-500 bg-red-950/30 border-red-500/30';
     headlineClass = 'text-red-200';
     riskIcon = 'alert-octagon';
     riskIconColor = 'text-red-400';
   } else if (risk === 'warning') {
     badgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
-    badgeLabel = 'ความเสี่ยง: เฝ้าระวัง (Warning)';
+    badgeLabel = 'ระดับความเสี่ยง: เฝ้าระวัง';
     bannerBorder = 'border-l-4 border-l-amber-500 bg-amber-950/25 border-amber-500/30';
     headlineClass = 'text-amber-200';
     riskIcon = 'shield-alert';
@@ -3365,14 +3532,14 @@ function renderAiAnalysis(data) {
 
     <!-- 2. Dual Content Box: Analysis & Preparation Advice -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-      <!-- Water Flow Direction & Analysis -->
-      <div class="rounded-2xl p-4 bg-gradient-to-b from-sky-950/20 to-slate-900/70 border border-sky-500/25 flex flex-col justify-between shadow-sm">
+      <!-- Water Flow Direction & Current Situation -->
+      <div class="rounded-2xl p-4 sm:p-5 bg-gradient-to-b from-[#0d1629] to-[#0a1020] border border-sky-500/30 flex flex-col justify-between shadow-lg">
         <div>
           <div class="flex items-center gap-2 mb-2.5 text-sky-400">
             <div class="p-1.5 rounded-lg bg-sky-500/20 border border-sky-500/30 shrink-0">
               <i data-lucide="waves" class="w-4 h-4"></i>
             </div>
-            <h4 class="text-xs font-bold uppercase tracking-wider text-sky-300">บทวิเคราะห์ทิศทางและการไหลของน้ำ</h4>
+            <h4 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-sky-300">สถานการณ์ปัจจุบัน</h4>
           </div>
           <p class="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
             ${analysis}
@@ -3381,13 +3548,13 @@ function renderAiAnalysis(data) {
       </div>
 
       <!-- Action Advice for Citizens -->
-      <div class="rounded-2xl p-4 bg-gradient-to-b from-amber-950/20 to-slate-900/70 border border-amber-500/25 flex flex-col justify-between shadow-sm">
+      <div class="rounded-2xl p-4 sm:p-5 bg-gradient-to-b from-[#181324] to-[#0a1020] border border-amber-500/30 flex flex-col justify-between shadow-lg">
         <div>
           <div class="flex items-center gap-2 mb-2.5 text-amber-400">
             <div class="p-1.5 rounded-lg bg-amber-500/20 border border-amber-500/30 shrink-0">
               <i data-lucide="shield-check" class="w-4 h-4"></i>
             </div>
-            <h4 class="text-xs font-bold uppercase tracking-wider text-amber-300">คำแนะนำการเตรียมตัวสำหรับประชาชน</h4>
+            <h4 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-300">สิ่งที่ควรเตรียมพร้อม</h4>
           </div>
           <p class="text-xs sm:text-sm text-slate-200 leading-relaxed font-normal">
             ${actionAdvice}

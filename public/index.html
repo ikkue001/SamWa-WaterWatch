@@ -98,34 +98,28 @@
         </div>
       </div>
 
-      <!-- [บรรทัดที่ 2: รวมแถบสถานะทั้งหมดให้อยู่ในบรรทัดเดียว (flex items-center justify-between gap-1 overflow-x-auto no-scrollbar)] -->
-      <div class="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar w-full md:w-auto py-0.5 shrink-0">
+      <!-- [บรรทัดที่ 2: รวมแถบสถานะทั้งหมดให้อยู่ในบรรทัดเดียว (flex items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar)] -->
+      <div class="flex items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar w-full md:w-auto py-0.5 shrink-0">
         
-        <!-- จุดเขียว 🟢 Live -->
-        <span id="realtimeConnectionBadge" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shrink-0 whitespace-nowrap" title="สถานะการเชื่อมต่อข้อมูล Realtime">
-          <span class="relative flex h-2 w-2 items-center justify-center shrink-0">
-            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]"></span>
-          </span>
-          <span class="font-medium">Live</span>
-        </span>
+        <!-- ซ่อน realtimeConnectionBadge ไว้เพื่อไม่ให้รก แต่ยังคง id ใน DOM ไว้สำหรับสคริปต์ที่เรียก -->
+        <span id="realtimeConnectionBadge" class="hidden"></span>
 
-        <!-- พิกัด GPS (ตัดทอนให้สั้นลงบนมือถือ เช่น 13.926, 100.707) -->
-        <button id="btnGpsRefresh" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-slate-800/90 hover:bg-slate-700/80 active:bg-slate-700 text-sky-300 border border-slate-700/80 transition shrink-0 whitespace-nowrap touch-manipulation" title="ค้นหาสถานีที่ใกล้คุณที่สุดด้วยพิกัด GPS">
-          <i id="gpsStatusIcon" data-lucide="locate-fixed" class="w-3 h-3 text-sky-400 shrink-0"></i>
-          <span id="gpsBtnText" class="font-mono text-[10px] sm:text-[11px]">13.926, 100.707</span>
+        <!-- ป้ายระบุตำแหน่งอย่างง่าย: "📍 ย่านคลองสามวา / พระยาสุเรนทร์" (แตะเพื่ออัปเดต GPS) -->
+        <button id="btnGpsRefresh" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700/80 active:bg-slate-700 text-sky-300 border border-slate-700/80 transition shrink-0 whitespace-nowrap touch-manipulation shadow-sm" title="📍 ตำแหน่ง: ย่านคลองสามวา / พระยาสุเรนทร์ (แตะเพื่ออัปเดต GPS)">
+          <i id="gpsStatusIcon" data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>
+          <span id="gpsBtnText" class="font-sans text-[11px] sm:text-xs">ย่านคลองสามวา / พระยาสุเรนทร์</span>
         </button>
 
         <!-- เวลา (เช่น 12:13 น.) -->
-        <div id="headerLastUpdatedBadge" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 shrink-0 whitespace-nowrap" title="เวลาตรวจวัดข้อมูลล่าสุด">
-          <i data-lucide="clock" class="w-3 h-3 text-emerald-400 shrink-0"></i>
-          <span id="lastUpdatedTime" class="font-mono text-emerald-300 font-medium text-[10px] sm:text-[11px]">--:-- น.</span>
+        <div id="headerLastUpdatedBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-xs text-slate-300 shrink-0 whitespace-nowrap" title="เวลาตรวจวัดข้อมูลล่าสุด">
+          <i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-400 shrink-0"></i>
+          <span id="lastUpdatedTime" class="font-mono text-emerald-300 font-medium text-[11px] sm:text-xs">--:-- น.</span>
         </div>
 
-        <!-- ปุ่มรีเฟรช/นับเวลาถอยหลัง (🔄 01:39): ปรับขนาดให้กะทัดรัด (text-xs py-1 px-2) เพื่อให้อยู่ในแถวเดียวกันเสมอ ห้ามตกบรรทัดเด็ดขาด -->
-        <button id="btnRefresh" class="inline-flex items-center gap-1 text-xs py-1 px-2 rounded-lg font-semibold bg-blue-600/90 hover:bg-blue-500 active:bg-blue-700 text-white transition shadow-sm disabled:opacity-50 touch-manipulation shrink-0 whitespace-nowrap" title="กดเพื่อดึงข้อมูลระดับน้ำล่าสุดทันที (นับถอยหลังรอบถัดไป)">
-          <i id="refreshIcon" data-lucide="refresh-cw" class="w-3 h-3 shrink-0 transition-transform duration-700"></i>
-          <span id="countdownTimer" class="font-mono text-blue-100 font-bold text-[11px]">02:00</span>
+        <!-- ปุ่มรีเฟรช/นับเวลาถอยหลัง (🔄 01:39): ปรับขนาดให้กะทัดรัด ห้ามตกบรรทัด -->
+        <button id="btnRefresh" class="inline-flex items-center gap-1.5 text-xs py-1 px-2.5 rounded-lg font-semibold bg-blue-600/90 hover:bg-blue-500 active:bg-blue-700 text-white transition shadow-sm disabled:opacity-50 touch-manipulation shrink-0 whitespace-nowrap" title="กดเพื่อดึงข้อมูลระดับน้ำล่าสุดทันที (นับถอยหลังรอบถัดไป)">
+          <i id="refreshIcon" data-lucide="refresh-cw" class="w-3.5 h-3.5 shrink-0 transition-transform duration-700"></i>
+          <span id="countdownTimer" class="font-mono text-blue-100 font-bold text-[11px] sm:text-xs">02:00</span>
         </button>
 
       </div>
@@ -242,7 +236,49 @@
   </div>
 
   <!-- ================= MAIN CONTENT ================= -->
-  <main class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-3 pb-6 sm:pt-4 sm:pb-8 flex-1 w-full space-y-5 sm:space-y-6 overflow-hidden min-h-screen" style="min-height: 100vh;">
+  <main class="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pt-3 pb-6 sm:pt-4 sm:pb-8 flex-1 w-full space-y-4 sm:space-y-6 overflow-hidden min-h-screen" style="min-height: 100vh;">
+
+    <!-- ================= HERO STATUS SUMMARY CARD (3-SECOND QUICK GLANCE) ================= -->
+    <section id="heroStatusSection" class="w-full transition-all duration-300">
+      <div id="heroStatusCard" class="rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-slate-900/95 border-emerald-500/40">
+        <!-- Ambient Background Glow -->
+        <div id="heroStatusGlow" class="absolute -top-16 -right-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3.5 sm:gap-4 relative z-10">
+          <div class="flex items-start sm:items-center gap-3 sm:gap-3.5 min-w-0">
+            <div id="heroStatusIconWrap" class="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/15 text-2xl select-none">
+              <i id="heroStatusIcon" data-lucide="shield-check" class="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400"></i>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 mb-1 flex-wrap">
+                <span id="heroStatusBadge" class="px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-mono">
+                  🟢 สถานการณ์ภาพรวม: ปกติ
+                </span>
+                <span class="text-[11px] text-slate-400 font-sans hidden sm:inline">⚡ สรุปด่วน 3 วินาที</span>
+              </div>
+              <h2 id="heroStatusHeadline" class="text-base sm:text-lg md:text-xl font-black text-white tracking-tight leading-snug">
+                ทุกสายคลองยังต่ำกว่าตลิ่ง ระบายน้ำได้ดี
+              </h2>
+              <p id="heroStatusSubtitle" class="text-xs sm:text-sm text-slate-300 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                ระดับน้ำทั้ง 9 จุดตรวจวัดหลักอยู่ในเกณฑ์ควบคุม การระบายน้ำคลองหกวาและคลองพระยาสุเรนทร์คล่องตัว
+              </p>
+            </div>
+          </div>
+
+          <!-- Quick Metric Stat Pills -->
+          <div id="heroStatusCounters" class="flex items-center gap-2 sm:gap-2.5 shrink-0 overflow-x-auto no-scrollbar pt-1 md:pt-0">
+            <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span id="heroStatNormalCount">ปกติ 9/9 จุด</span>
+            </div>
+            <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700/80 text-slate-300 text-xs font-medium flex items-center gap-1.5 whitespace-nowrap shadow-sm">
+              <i data-lucide="droplets" class="w-3.5 h-3.5 text-sky-400"></i>
+              <span>ระบายน้ำคล่องตัว</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ================= INTERACTIVE FLOOD MAP (LEAFLET & OSM) ================= -->
     <section id="mapSection" class="space-y-3">
@@ -532,9 +568,9 @@
 
     <!-- ================= AI WATER SITUATION ANALYSIS & OFFICIAL NEWS (AI INSIGHTS) ================= -->
     <!-- ================= AI WATER SITUATION ANALYSIS & OFFICIAL NEWS (AI INSIGHTS) ================= -->
-    <section id="aiAnalysisSection" class="rounded-2xl sm:rounded-3xl glass-panel p-4 sm:p-6 border border-slate-800 shadow-xl relative overflow-hidden transition-all duration-300 min-h-[170px]">
-      <!-- Ambient Glow Behind AI Card -->
-      <div class="absolute -top-24 -right-24 w-72 h-72 bg-gradient-to-br from-indigo-500/10 via-purple-500/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+    <section id="aiAnalysisSection" class="rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-indigo-500/25 bg-gradient-to-br from-slate-900/95 via-[#0d1629] to-[#0a1020] shadow-2xl relative overflow-hidden transition-all duration-300 min-h-[170px]">
+      <!-- Ambient Glow Behind AI Card (Soothing Midnight Indigo) -->
+      <div class="absolute -top-24 -right-24 w-80 h-80 bg-gradient-to-br from-indigo-500/15 via-blue-600/10 to-transparent rounded-full blur-3xl pointer-events-none"></div>
       
       <!-- AI Header -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80 relative z-10">

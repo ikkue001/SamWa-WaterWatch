@@ -151,6 +151,40 @@ function evaluateStationStaleness(station, now = new Date()) {
   };
 }
 
+/**
+ * Format water difference into friendly conversational Thai for citizens
+ * e.g. "ต่ำกว่าตลิ่ง 28 ซม.", "เกินระดับวิกฤติ 12 ซม. (เฝ้าระวัง)", "ล้นตลิ่ง 10 ซม."
+ */
+function formatFriendlyDiffServer(waterLevel, bankLevel, criticalLevel) {
+  if (waterLevel === null || waterLevel === undefined || isNaN(waterLevel)) {
+    return 'รอข้อมูลตรวจวัด';
+  }
+  const lvl = parseFloat(waterLevel);
+  const bank = parseFloat(bankLevel);
+  const crit = criticalLevel !== null && criticalLevel !== undefined && !isNaN(parseFloat(criticalLevel)) ? parseFloat(criticalLevel) : null;
+
+  if (!isNaN(bank) && lvl >= bank) {
+    const diff = parseFloat((lvl - bank).toFixed(2));
+    const cm = Math.round(diff * 100);
+    if (cm === 0) return 'แตะระดับตลิ่งพอดี (เสี่ยงล้น)';
+    return diff < 1.0 ? `ล้นตลิ่ง ${cm} ซม.` : `ล้นตลิ่ง ${diff.toFixed(2)} ม.`;
+  }
+
+  if (crit !== null && lvl >= crit) {
+    const diffCrit = parseFloat((lvl - crit).toFixed(2));
+    const cmCrit = Math.round(diffCrit * 100);
+    return diffCrit < 1.0 ? `เกินระดับวิกฤติ ${cmCrit} ซม. (เฝ้าระวัง)` : `เกินระดับวิกฤติ ${diffCrit.toFixed(2)} ม. (เฝ้าระวัง)`;
+  }
+
+  if (!isNaN(bank)) {
+    const diffBank = parseFloat((bank - lvl).toFixed(2));
+    const cmBank = Math.round(diffBank * 100);
+    return diffBank < 1.0 ? `ต่ำกว่าตลิ่ง ${cmBank} ซม.` : `ต่ำกว่าตลิ่ง ${diffBank.toFixed(2)} ม.`;
+  }
+
+  return 'ระดับปกติ';
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -176,7 +210,7 @@ let state = {
     criticalLevel: cfg.defaultCritical,
     diff: parseFloat((cfg.defaultWarning - cfg.defaultBank).toFixed(2)),
     diffCritical: parseFloat((cfg.defaultWarning - cfg.defaultCritical).toFixed(2)),
-    diffText: `ต่ำกว่าตลิ่ง ${Math.abs(cfg.defaultWarning - cfg.defaultBank).toFixed(2)} ม.`,
+    diffText: formatFriendlyDiffServer(cfg.defaultWarning, cfg.defaultBank, cfg.defaultCritical),
     unit: 'ม.รทก.',
     storagePercent: 75.0,
     isOverflow: false,
@@ -400,6 +434,18 @@ function getProcessedStations() {
     const critLvl = s.criticalLevel !== null && s.criticalLevel !== undefined ? parseFloat(s.criticalLevel) : null;
     const isCritNum = (rawLvl !== null && critLvl !== null && !isNaN(rawLvl) && !isNaN(critLvl) && rawLvl >= critLvl);
     s.isCritical = Boolean(s.isCritical || s.isWarning || s.isOverflow || isCritNum);
+
+    // Format friendly citizen-oriented diff text
+    if (!s.isGate) {
+      s.diffText = formatFriendlyDiffServer(s.waterLevel, s.bankLevel, s.criticalLevel);
+    } else if (s.isGate && s.inside && s.outside) {
+      if (s.inside.bank && s.inside.level !== undefined && s.inside.level !== null) {
+        s.inside.diffText = formatFriendlyDiffServer(s.inside.level, s.inside.bank, s.inside.critical);
+      }
+      if (s.outside.bank && s.outside.level !== undefined && s.outside.level !== null) {
+        s.outside.diffText = formatFriendlyDiffServer(s.outside.level, s.outside.bank, s.outside.critical);
+      }
+    }
   });
 
   return stations;
