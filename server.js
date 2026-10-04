@@ -1100,120 +1100,162 @@ app.get('/api/water-history', async (req, res) => {
 app.get('/api/ai-analysis', async (req, res) => {
   const nowMs = Date.now();
   const isForce = req.query.t || req.query.force;
+  const rawKey = process.env.GEMINI_API_KEY || '';
+  const apiKey = String(rawKey).trim();
+  const processed = getProcessedStations();
+  const analyzedAt = new Date().toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok' });
+
+  // Validate API key format (must start with AIza)
+  if (!apiKey || !apiKey.startsWith('AIza')) {
+    console.warn('[server.js] GEMINI_API_KEY is missing or does not start with AIza.');
+    const fallback = generateHydrologicalFallbackServer(processed);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.json({
+      success: false,
+      error: 'INVALID_OR_MISSING_API_KEY',
+      message: 'กรุณาใส่ Gemini API Key (ที่ขึ้นต้นด้วย AIza...) ใน Cloudflare Pages',
+      modelUsed: 'hydrological-expert-system',
+      analyzedAt,
+      ...fallback
+    });
+  }
+
   if (!isForce && cachedAiAnalysis && (nowMs - cachedAiTimestamp < AI_CACHE_DURATION_MS)) {
     res.set('Cache-Control', 'public, max-age=1800');
     return res.json(cachedAiAnalysis);
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  const processed = getProcessedStations();
   let result = null;
 
-  if (apiKey) {
-    try {
-      const criticalOrOverflow = processed.filter(s => {
-        const lvl = Number(s.waterLevel);
-        const crit = Number(s.criticalLevel);
-        const bank = Number(s.bankLevel);
-        return !isNaN(lvl) && ((crit && lvl >= crit) || (bank && lvl >= bank));
-      });
-      const staleStations = processed.filter(s => s.isStale);
+  try {
+    const criticalOrOverflow = processed.filter(s => {
+      const lvl = Number(s.waterLevel);
+      const crit = Number(s.criticalLevel);
+      const bank = Number(s.bankLevel);
+      return !isNaN(lvl) && ((crit && lvl >= crit) || (bank && lvl >= bank));
+    });
 
-      const promptText = `คุณคือผู้เชี่ยวชาญด้านวิศวกรรมชลประทานและอุทกวิทยา วิเคราะห์สถานการณ์น้ำท่วมเขตคลองสามวาและพื้นที่ใกล้เคียง จากข้อมูลโทรมาตรล่าสุด:
+    const promptText = `วิเคราะห์สถานการณ์น้ำสดสำหรับเขตคลองสามวาและรอยต่อ: สรุปสั้น กระชับ 2 ประโยค พร้อมคำแนะนำประชาชน
+จากข้อมูลโทรมาตร 9 สถานีล่าสุด:
 ${JSON.stringify({
   stations_telemetry: processed.map(s => ({
     code: s.stCode,
     name: s.name,
     canal: s.canal,
     water_level_m: s.waterLevel !== null && s.waterLevel !== undefined ? Number(s.waterLevel) : null,
-    warning_level_m: Number(s.warningLevel) || null,
     critical_level_m: Number(s.criticalLevel) || null,
     bank_level_m: Number(s.bankLevel) || null,
-    trend: s.trend || 'STABLE',
-    is_stale: Boolean(s.isStale)
+    trend: s.trend || 'STABLE'
   })),
   critical_or_overflow_count: criticalOrOverflow.length,
-  critical_or_overflow_stations: criticalOrOverflow.map(s => s.stCode + ' ' + s.name),
-  stale_count: staleStations.length,
-  stale_stations: staleStations.map(s => s.stCode),
-  junction_context: 'แนวคลองหกวาตอนบน (ST-1, ST-2, ST-3, ST-5, ST-6) เชื่อมต่อเข้าคลองพระยาสุเรนทร์ (ST-7, ST-8) และระบายออกผ่าน ปตร.คลองสามวา (ST-4, ST-9)'
+  critical_or_overflow_stations: criticalOrOverflow.map(s => `${s.stCode} ${s.name}`)
 }, null, 2)}
 
-วิเคราะห์และตอบกลับในรูปแบบ JSON ตามโครงสร้างนี้เท่านั้น:
+ตอบกลับในรูปแบบ JSON ตามโครงสร้างนี้เท่านั้น:
 {
   "risk_level": "normal" | "warning" | "danger",
   "headline": "หัวข้อสรุปสั้นกระชับ ไม่เกิน 15 คำ",
-  "analysis": "บทวิเคราะห์สรุปแนวโน้มน้ำและการไหลในแนวคลองหกวา/พระยาสุเรนทร์ 2-3 ประโยค",
+  "analysis": "บทวิเคราะห์สรุปแนวโน้มน้ำและการไหล 2-3 ประโยค",
   "trend_6h": "แนวโน้ม 6-12 ชม. ข้างหน้า (เพิ่มขึ้น / ทรงตัว / ลดลง)",
-  "action_advice": "คำแนะนำเชิงรุกสำหรับประชาชนในพื้นที่ (เช่น ยกของขึ้นที่สูง, ติดตามข่าวสาร)",
+  "action_advice": "คำแนะนำเชิงรุกสำหรับประชาชนในพื้นที่",
   "official_context": "บริบทประกาศจาก สนน.กทม. หรือ กรมชลประทานที่เกี่ยวข้อง"
 }`;
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const geminiRes = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 800,
-            response_mime_type: 'application/json',
-            responseMimeType: 'application/json'
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+    const geminiRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: promptText
+              }
+            ]
           }
-        })
-      });
-
-      if (geminiRes.ok) {
-        const geminiData = await geminiRes.json();
-        const candidateText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (candidateText) {
-          let cleaned = candidateText.trim();
-          if (cleaned.startsWith('```')) {
-            cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-          }
-          const parsed = JSON.parse(cleaned);
-          if (parsed && (parsed.headline || parsed.analysis)) {
-            let risk = 'normal';
-            const rawRisk = String(parsed.risk_level || parsed.riskLevel || '').toLowerCase();
-            if (rawRisk.includes('danger') || rawRisk.includes('วิกฤติ') || rawRisk.includes('emergency')) {
-              risk = 'danger';
-            } else if (rawRisk.includes('warn') || rawRisk.includes('เฝ้าระวัง') || rawRisk.includes('เสี่ยง')) {
-              risk = 'warning';
-            }
-
-            result = {
-              risk_level: risk,
-              headline: parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา',
-              analysis: parsed.analysis || '',
-              trend_6h: parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ',
-              action_advice: parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง',
-              official_context: parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ',
-              riskLevel: risk === 'danger' ? 'วิกฤติ' : (risk === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
-              riskColor: risk === 'danger' ? 'red' : (risk === 'warning' ? 'amber' : 'emerald'),
-              summary: parsed.analysis || '',
-              trendPrediction: parsed.trend_6h || '',
-              sourceNews: parsed.official_context || '',
-              advisory: parsed.action_advice || '',
-              source: 'gemini-1.5-flash',
-              generatedAt: new Date().toISOString()
-            };
-          }
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2
         }
+      })
+    });
+
+    if (geminiRes.ok) {
+      const geminiData = await geminiRes.json();
+      const candidateText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (candidateText) {
+        let cleaned = candidateText.trim();
+        if (cleaned.startsWith('```')) {
+          cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        }
+        let parsed = null;
+        try {
+          parsed = JSON.parse(cleaned);
+        } catch (_) {
+          const lines = cleaned.split('\n').filter(Boolean);
+          parsed = {
+            headline: lines[0] || 'สรุปสถานการณ์น้ำสดเขตคลองสามวา',
+            analysis: lines.slice(0, 2).join(' ') || cleaned,
+            action_advice: lines.slice(2).join(' ') || 'ติดตามสถานการณ์น้ำอย่างต่อเนื่อง',
+            risk_level: 'normal',
+            trend_6h: 'ทรงตัวในเกณฑ์ปกติ'
+          };
+        }
+
+        let risk = 'normal';
+        const rawRisk = String(parsed.risk_level || parsed.riskLevel || '').toLowerCase();
+        if (rawRisk.includes('danger') || rawRisk.includes('วิกฤติ') || rawRisk.includes('emergency')) {
+          risk = 'danger';
+        } else if (rawRisk.includes('warn') || rawRisk.includes('เฝ้าระวัง') || rawRisk.includes('เสี่ยง')) {
+          risk = 'warning';
+        }
+
+        result = {
+          success: true,
+          modelUsed: 'gemini-3.5-flash-lite',
+          source: 'gemini-3.5-flash-lite',
+          risk_level: risk,
+          headline: parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา',
+          analysis: parsed.analysis || '',
+          trend_6h: parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ',
+          action_advice: parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง',
+          official_context: parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ',
+          analyzedAt,
+          riskLevel: risk === 'danger' ? 'วิกฤติ' : (risk === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
+          riskColor: risk === 'danger' ? 'red' : (risk === 'warning' ? 'amber' : 'emerald'),
+          summary: parsed.analysis || '',
+          trendPrediction: parsed.trend_6h || '',
+          sourceNews: parsed.official_context || '',
+          advisory: parsed.action_advice || '',
+          generatedAt: new Date().toISOString()
+        };
       }
-    } catch (e) {
-      console.warn('[server.js] Gemini API call error:', e.message);
+    } else {
+      const errText = await geminiRes.text();
+      console.warn(`[server.js] Gemini API HTTP ${geminiRes.status}:`, errText);
     }
+  } catch (e) {
+    console.warn('[server.js] Gemini API call error:', e.message);
   }
 
   if (!result) {
-    result = generateHydrologicalFallbackServer(processed);
+    const fallback = generateHydrologicalFallbackServer(processed);
+    result = {
+      success: false,
+      error: 'GEMINI_CALL_FAILED',
+      message: 'ไม่สามารถเรียกใช้ Gemini API ได้ กำลังใช้งานระบบประเมินอุทกวิทยาอัตโนมัติ',
+      modelUsed: 'hydrological-expert-system',
+      analyzedAt,
+      ...fallback
+    };
   }
 
   cachedAiAnalysis = result;
   cachedAiTimestamp = nowMs;
 
-  res.set('Cache-Control', 'public, max-age=1800');
+  res.set('Cache-Control', result.success ? 'public, max-age=1800' : 'no-store');
   res.json(result);
 });
 

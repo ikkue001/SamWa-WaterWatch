@@ -1,8 +1,8 @@
 /**
  * Cloudflare Pages Function - AI Water Situation Analysis & Official News
  * Route: /api/ai-analysis
- * Description: Hydrological assessment of the 9 stations using Google Gemini API (Gemini 1.5 Flash)
- * with intelligent rule-based fallback and Edge CDN caching (30 minutes).
+ * Description: Hydrological assessment of the 9 stations using Google Gemini API (Gemini 3.5 Flash Lite)
+ * with strict key validation, explicit error status, and intelligent rule-based fallback.
  */
 
 import { assembleWaterSummaryData } from './water-summary.js';
@@ -22,8 +22,7 @@ const STATIONS_INFO_BASELINE = [
 
 /**
  * Intelligent Rule-Based Hydrological Fallback Engine
- * Generates accurate hydrological analysis without requiring external API calls.
- * Ensures the system never crashes with 500 when Gemini API key is missing or quota exceeded.
+ * Generates accurate hydrological analysis based on real water telemetry.
  */
 function generateGracefulHydrologicalFallback(stations = STATIONS_INFO_BASELINE) {
   let criticalCount = 0;
@@ -91,6 +90,7 @@ function generateGracefulHydrologicalFallback(stations = STATIONS_INFO_BASELINE)
     trend_6h: trend6h,
     action_advice: actionAdvice,
     official_context: officialContext,
+    modelUsed: 'hydrological-expert-system',
     // Backward-compatibility aliases
     riskLevel: riskLevel === 'danger' ? 'วิกฤติ' : (riskLevel === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
     riskColor: riskLevel === 'danger' ? 'red' : (riskLevel === 'warning' ? 'amber' : 'emerald'),
@@ -105,7 +105,6 @@ function generateGracefulHydrologicalFallback(stations = STATIONS_INFO_BASELINE)
 
 export async function onRequest(context) {
   const { request, env } = context;
-  const apiKey = env?.GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : null);
 
   // CORS Preflight
   if (request.method === 'OPTIONS') {
@@ -118,30 +117,11 @@ export async function onRequest(context) {
     });
   }
 
-  // 1. Cloudflare Edge Cache API: 30 minutes (1800s)
-  const cacheUrl = new URL(request.url);
-  const cacheKey = new Request(cacheUrl.toString(), request);
-  let cache = null;
-  try {
-    cache = caches.default;
-  } catch (e) {
-    // Edge cache unavailable (local or non-worker runtime)
-  }
+  const rawKey = env?.GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : '') || '';
+  const apiKey = String(rawKey).trim();
+  const analyzedAt = new Date().toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok' });
 
-  // If client did not explicitly request fresh data (e.g. via cache bust query ?t=)
-  const isBustCache = cacheUrl.searchParams.has('t') || cacheUrl.searchParams.has('force');
-  if (cache && !isBustCache) {
-    try {
-      const cached = await cache.match(cacheKey);
-      if (cached) {
-        return cached;
-      }
-    } catch (e) {
-      // cache match failed, proceed to generate
-    }
-  }
-
-  // 2. Collect Live Telemetry Context across all 9 stations
+  // 1. Collect Live Telemetry Context across all 9 stations
   let stations = STATIONS_INFO_BASELINE;
   try {
     const summaryData = await assembleWaterSummaryData();
@@ -149,10 +129,32 @@ export async function onRequest(context) {
       stations = summaryData.stations;
     }
   } catch (err) {
-    console.warn('[AI Analysis] Could not assemble live telemetry, using baseline:', err.message);
+    console.warn('[AI Analysis] Telemetry error, using baseline:', err.message);
   }
 
-  // Summarize key indicators for the AI prompt
+  // 2. Validate API Key: Missing or does not start with "AIza"
+  if (!apiKey || !apiKey.startsWith('AIza')) {
+    console.warn('[AI Analysis] GEMINI_API_KEY is missing or invalid (must start with AIza).');
+    const fallback = generateGracefulHydrologicalFallback(stations);
+    return new Response(JSON.stringify({
+      success: false,
+      error: "INVALID_OR_MISSING_API_KEY",
+      message: "กรุณาใส่ Gemini API Key (ที่ขึ้นต้นด้วย AIza...) ใน Cloudflare Pages",
+      modelUsed: "hydrological-expert-system",
+      analyzedAt,
+      ...fallback
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS'
+      }
+    });
+  }
+
+  // 3. Summarize telemetry context for AI prompt
   const criticalOrOverflow = stations.filter(s => {
     const lvl = Number(s.waterLevel);
     const crit = Number(s.criticalLevel);
@@ -160,139 +162,165 @@ export async function onRequest(context) {
     return !isNaN(lvl) && ((crit && lvl >= crit) || (bank && lvl >= bank));
   });
 
-  const staleStations = stations.filter(s => s.isStale);
-
   const telemetryContext = stations.map(s => ({
     code: s.stCode,
     name: s.name,
     canal: s.canal,
     water_level_m: s.waterLevel !== null && s.waterLevel !== undefined ? Number(s.waterLevel) : null,
-    warning_level_m: Number(s.warningLevel) || null,
     critical_level_m: Number(s.criticalLevel) || null,
     bank_level_m: Number(s.bankLevel) || null,
-    trend: s.trend || 'STABLE',
-    is_stale: Boolean(s.isStale),
-    is_warning: Boolean(s.isWarning),
-    is_overflow: Boolean(s.isOverflow)
+    trend: s.trend || 'STABLE'
   }));
 
-  let aiResult = null;
-
-  // 3. Call Google Gemini API if key is configured
-  if (apiKey) {
-    try {
-      const promptText = `คุณคือผู้เชี่ยวชาญด้านวิศวกรรมชลประทานและอุทกวิทยา วิเคราะห์สถานการณ์น้ำท่วมเขตคลองสามวาและพื้นที่ใกล้เคียง จากข้อมูลโทรมาตรล่าสุด:
+  const promptText = `คุณคือผู้เชี่ยวชาญด้านอุทกวิทยา วิเคราะห์ข้อมูลระดับน้ำ 9 สถานีเขตคลองสามวาและแนวเชื่อมต่อคลองหกวา/พระยาสุเรนทร์:
 ${JSON.stringify({
   stations_telemetry: telemetryContext,
   critical_or_overflow_count: criticalOrOverflow.length,
-  critical_or_overflow_stations: criticalOrOverflow.map(s => s.stCode + ' ' + s.name),
-  stale_count: staleStations.length,
-  stale_stations: staleStations.map(s => s.stCode),
-  junction_context: 'แนวคลองหกวาตอนบน (ST-1, ST-2, ST-3, ST-5, ST-6) เชื่อมต่อเข้าคลองพระยาสุเรนทร์ (ST-7, ST-8) และระบายออกผ่าน ปตร.คลองสามวา (ST-4, ST-9)'
+  critical_or_overflow_stations: criticalOrOverflow.map(s => `${s.stCode} ${s.name}`)
 }, null, 2)}
-
-วิเคราะห์และตอบกลับในรูปแบบ JSON ตามโครงสร้างนี้เท่านั้น:
+วิเคราะห์ความเสี่ยงและส่งผลลัพธ์เป็น JSON ภาษาไทย (headline, analysis, trend_6h, action_advice) ตามโครงสร้างนี้:
 {
   "risk_level": "normal" | "warning" | "danger",
   "headline": "หัวข้อสรุปสั้นกระชับ ไม่เกิน 15 คำ",
-  "analysis": "บทวิเคราะห์สรุปแนวโน้มน้ำและการไหลในแนวคลองหกวา/พระยาสุเรนทร์ 2-3 ประโยค",
+  "analysis": "บทวิเคราะห์สรุปแนวโน้มน้ำและการไหล 2-3 ประโยค",
   "trend_6h": "แนวโน้ม 6-12 ชม. ข้างหน้า (เพิ่มขึ้น / ทรงตัว / ลดลง)",
-  "action_advice": "คำแนะนำเชิงรุกสำหรับประชาชนในพื้นที่ (เช่น ยกของขึ้นที่สูง, ติดตามข่าวสาร)",
+  "action_advice": "คำแนะนำเชิงรุกสำหรับประชาชนในพื้นที่",
   "official_context": "บริบทประกาศจาก สนน.กทม. หรือ กรมชลประทานที่เกี่ยวข้อง"
 }`;
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const geminiRes = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 800,
-            response_mime_type: 'application/json',
-            responseMimeType: 'application/json'
+  // 4. Request Gemini API (gemini-3.5-flash-lite)
+  try {
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+    const geminiRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: promptText
+              }
+            ]
           }
-        })
-      });
-
-      if (geminiRes.ok) {
-        const geminiData = await geminiRes.json();
-        const candidateText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (candidateText) {
-          let cleaned = candidateText.trim();
-          if (cleaned.startsWith('```')) {
-            cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-          }
-          const parsed = JSON.parse(cleaned);
-
-          if (parsed && (parsed.headline || parsed.analysis)) {
-            // Normalize risk_level strictly to 'normal' | 'warning' | 'danger'
-            let risk = 'normal';
-            const rawRisk = String(parsed.risk_level || parsed.riskLevel || '').toLowerCase();
-            if (rawRisk.includes('danger') || rawRisk.includes('วิกฤติ') || rawRisk.includes('emergency')) {
-              risk = 'danger';
-            } else if (rawRisk.includes('warn') || rawRisk.includes('เฝ้าระวัง') || rawRisk.includes('เสี่ยง')) {
-              risk = 'warning';
-            }
-
-            aiResult = {
-              risk_level: risk,
-              headline: parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา',
-              analysis: parsed.analysis || '',
-              trend_6h: parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ',
-              action_advice: parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง',
-              official_context: parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ',
-              // Aliases for backward compatibility
-              riskLevel: risk === 'danger' ? 'วิกฤติ' : (risk === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
-              riskColor: risk === 'danger' ? 'red' : (risk === 'warning' ? 'amber' : 'emerald'),
-              summary: parsed.analysis || '',
-              trendPrediction: parsed.trend_6h || '',
-              sourceNews: parsed.official_context || '',
-              advisory: parsed.action_advice || '',
-              source: 'gemini-1.5-flash',
-              generatedAt: new Date().toISOString()
-            };
-          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2
         }
-      } else {
-        const errText = await geminiRes.text();
-        console.warn(`[AI Analysis] Gemini API HTTP ${geminiRes.status}:`, errText);
-      }
-    } catch (apiErr) {
-      console.warn('[AI Analysis] Gemini API request failed:', apiErr.message);
+      })
+    });
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text();
+      console.warn(`[AI Analysis] Gemini API Error (HTTP ${geminiRes.status}):`, errText);
+      const fallback = generateGracefulHydrologicalFallback(stations);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `GEMINI_HTTP_${geminiRes.status}`,
+        message: `Gemini API Error (${geminiRes.status}): ${errText.slice(0, 160)}`,
+        modelUsed: "hydrological-expert-system",
+        analyzedAt,
+        ...fallback
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS'
+        }
+      });
     }
-  } else {
-    console.warn('[AI Analysis] GEMINI_API_KEY environment variable is not configured. Falling back to hydrological evaluation.');
-  }
 
-  // 4. Graceful Degradation: If Gemini call fails or no API key, use Expert Hydrological Engine
-  if (!aiResult) {
-    aiResult = generateGracefulHydrologicalFallback(stations);
-  }
+    const geminiData = await geminiRes.json();
+    const candidateText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  // 5. Construct HTTP Response with 30-Minute Edge Caching Headers
-  const response = new Response(JSON.stringify(aiResult), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=1800, s-maxage=1800',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'X-AI-Source': aiResult.source || 'gemini-1.5-flash'
+    if (!candidateText) {
+      throw new Error('Gemini API returned empty candidate text');
     }
-  });
 
-  // Save to Edge Cache
-  if (cache && context.waitUntil && !isBustCache) {
+    let cleaned = candidateText.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    }
+
+    let parsed = null;
     try {
-      context.waitUntil(cache.put(cacheKey, response.clone()));
+      parsed = JSON.parse(cleaned);
     } catch (e) {
-      // cache put ignore
+      // If plain text was returned instead of JSON
+      const lines = cleaned.split('\n').filter(Boolean);
+      parsed = {
+        headline: lines[0] || 'สรุปสถานการณ์น้ำสดเขตคลองสามวา',
+        analysis: lines.slice(0, 2).join(' ') || cleaned,
+        action_advice: lines.slice(2).join(' ') || 'ติดตามสถานการณ์และตรวจสอบระบบระบายน้ำรอบที่อยู่อาศัย',
+        risk_level: 'normal',
+        trend_6h: 'ทรงตัวในเกณฑ์ปกติ'
+      };
     }
-  }
 
-  return response;
+    // Normalize risk_level strictly to 'normal' | 'warning' | 'danger'
+    let risk = 'normal';
+    const rawRisk = String(parsed.risk_level || parsed.riskLevel || '').toLowerCase();
+    if (rawRisk.includes('danger') || rawRisk.includes('วิกฤติ') || rawRisk.includes('emergency')) {
+      risk = 'danger';
+    } else if (rawRisk.includes('warn') || rawRisk.includes('เฝ้าระวัง') || rawRisk.includes('เสี่ยง')) {
+      risk = 'warning';
+    }
+
+    const aiResult = {
+      success: true,
+      modelUsed: "gemini-3.5-flash-lite",
+      source: "gemini-3.5-flash-lite",
+      risk_level: risk,
+      headline: parsed.headline || 'สรุปสถานการณ์น้ำเขตคลองสามวาและแนวคลองหกวา',
+      analysis: parsed.analysis || '',
+      trend_6h: parsed.trend_6h || 'ทรงตัวในเกณฑ์ปกติ',
+      action_advice: parsed.action_advice || 'ติดตามข้อมูลข่าวสารอย่างต่อเนื่อง',
+      official_context: parsed.official_context || 'สนน.กทม. และกรมชลประทานร่วมบริหารจัดการน้ำ',
+      analyzedAt,
+      // Aliases for backward compatibility
+      riskLevel: risk === 'danger' ? 'วิกฤติ' : (risk === 'warning' ? 'เฝ้าระวัง' : 'ปกติ'),
+      riskColor: risk === 'danger' ? 'red' : (risk === 'warning' ? 'amber' : 'emerald'),
+      summary: parsed.analysis || '',
+      trendPrediction: parsed.trend_6h || '',
+      sourceNews: parsed.official_context || '',
+      advisory: parsed.action_advice || '',
+      generatedAt: new Date().toISOString()
+    };
+
+    return new Response(JSON.stringify(aiResult), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'public, max-age=1800, s-maxage=1800',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'X-AI-Source': 'gemini-3.5-flash-lite'
+      }
+    });
+
+  } catch (apiErr) {
+    console.warn('[AI Analysis] Gemini execution error:', apiErr.message);
+    const fallback = generateGracefulHydrologicalFallback(stations);
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'GEMINI_CALL_FAILED',
+      message: `เกิดข้อผิดพลาดในการเชื่อมต่อ Gemini API: ${apiErr.message}`,
+      modelUsed: "hydrological-expert-system",
+      analyzedAt,
+      ...fallback
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS'
+      }
+    });
+  }
 }
 
 export async function onRequestGet(context) {

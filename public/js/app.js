@@ -337,8 +337,26 @@ function evaluateStationStaleness(station, now = new Date()) {
   };
 }
 
-// Initialize on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', () => {
+/**
+ * Auto-Fetch on First Load Core Wrappers
+ */
+async function fetchAllStationData() {
+  return await fetchWaterSummary();
+}
+window.fetchAllStationData = fetchAllStationData;
+
+async function fetchAiAnalysis(forceRefresh = false) {
+  return await loadAiAnalysis(forceRefresh);
+}
+window.fetchAiAnalysis = fetchAiAnalysis;
+
+function startRefreshTimer() {
+  resetCountdown(120);
+  startCountdownTimer();
+}
+window.startRefreshTimer = startRefreshTimer;
+
+function initializeApplication() {
   if (window.lucide) {
     window.lucide.createIcons();
   }
@@ -351,19 +369,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // Connect Realtime SSE Stream
   initRealtimeSSE();
 
-  // Initial fetch and start GPS detection
-  fetchWaterSummary();
+  // Initial GPS detection
   initGeolocation();
-
-  // Initialize AI Water Situation Analysis
-  loadAiAnalysis();
 
   // Initialize 24-Hour Historical Water Level Chart
   initWaterHistoryChart();
 
-  // Countdown timer
-  startCountdownTimer();
-});
+  // 1. เรียกข้อมูลสถานีทันที
+  fetchAllStationData();
+
+  // 2. เรียกบทวิเคราะห์ AI ทันที
+  fetchAiAnalysis();
+
+  // 3. แล้วค่อยเริ่มจับเวลานับถอยหลังรอบถัดไป
+  startRefreshTimer();
+}
+
+// Immediate execution check: If DOM is already loaded/interactive, run immediately without waiting!
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeApplication);
+} else {
+  initializeApplication();
+}
 
 /**
  * Setup Realtime SSE Persistent Connection or Cloudflare Edge Polling Fallback
@@ -775,13 +802,13 @@ function setupEventListeners() {
       if (icon) icon.classList.add('spinning-360');
 
       try {
-        let res = await fetch('/api/water-summary');
+        let res = await fetch('/api/water-summary', { cache: 'no-store' });
         if (!res.ok) {
-          res = await fetch('/api/refresh', { method: 'POST' });
+          res = await fetch('/api/refresh', { method: 'POST', cache: 'no-store' });
         }
         const data = await res.json();
         applyDataUpdate(data);
-        loadAiAnalysis(true);
+        fetchAiAnalysis(true);
         initWaterHistoryChart();
       } catch (err) {
         console.error('Refresh error:', err);
@@ -960,7 +987,7 @@ function recalculateDistances() {
  */
 async function fetchWaterSummary() {
   try {
-    const res = await fetch('/api/water-summary');
+    const res = await fetch('/api/water-summary', { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
     applyDataUpdate(data);
@@ -3133,7 +3160,7 @@ async function loadAiAnalysis(forceRefresh = false) {
 
   try {
     const url = forceRefresh ? `/api/ai-analysis?t=${Date.now()}` : '/api/ai-analysis';
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     renderAiAnalysis(data);
@@ -3211,7 +3238,13 @@ function generateClientSideAiFallback() {
     officialContext = 'สนน.กทม. และกรมชลประทานบริหารจัดการน้ำตามเกณฑ์ปกติ พร้อมเฝ้าระวังเรดาร์ฝนกลุ่มเมฆในพื้นที่เขตคลองสามวา';
   }
 
+  const nowTime = new Date().toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok' });
+
   return {
+    success: false,
+    error: 'CLIENT_FALLBACK',
+    message: 'กำลังประเมินโดยระบบอุทกวิทยาอัตโนมัติบนหน้าเว็บ',
+    analyzedAt: nowTime,
     risk_level: riskLevel,
     headline,
     analysis,
@@ -3234,26 +3267,27 @@ function renderAiAnalysis(data) {
 
   const skeleton = document.getElementById('aiLoadingSkeleton');
   const content = document.getElementById('aiAnalysisContent');
-  const modelText = document.getElementById('aiModelText');
+  const modelBadge = document.getElementById('aiModelBadge');
   const updatedBadge = document.getElementById('aiUpdatedTimeBadge');
   const headerRiskBadge = document.getElementById('aiHeaderRiskBadge');
 
-  const isGemini = data.source === 'gemini-1.5-flash';
-  if (modelText) {
-    modelText.textContent = isGemini ? 'Gemini 1.5 Flash' : 'ระบบวิเคราะห์อุทกวิทยา';
-  }
+  const isGeminiSuccess = Boolean(data.success === true && (data.modelUsed === 'gemini-3.5-flash-lite' || data.source?.includes('gemini')));
+  const analyzedTime = data.analyzedAt ? `${data.analyzedAt} น.` : (data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.' : 'ประมวลผลล่าสุด');
 
-  let formattedTime = 'ประมวลผลล่าสุด';
-  if (data.generatedAt) {
-    try {
-      const d = new Date(data.generatedAt);
-      formattedTime = `ประมวลผลเมื่อ ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`;
-    } catch (e) {
-      formattedTime = 'ประมวลผลล่าสุด';
+  // 1. Header Model Badge
+  if (modelBadge) {
+    if (isGeminiSuccess) {
+      modelBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-400/40 shadow-sm flex items-center gap-1 font-mono';
+      modelBadge.innerHTML = '<i data-lucide="zap" class="w-3 h-3 text-amber-400"></i><span>⚡ วิเคราะห์ด้วย Gemini 3.5 Flash Lite</span>';
+    } else {
+      modelBadge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow-sm flex items-center gap-1 font-mono';
+      modelBadge.innerHTML = '<i data-lucide="alert-triangle" class="w-3 h-3 text-amber-400"></i><span>⚠️ โหมดประเมินอัตโนมัติ</span>';
     }
   }
+
+  // 2. Header Updated Time Badge
   if (updatedBadge) {
-    updatedBadge.textContent = formattedTime;
+    updatedBadge.textContent = isGeminiSuccess ? `ประมวลผลล่าสุด ${analyzedTime}` : `ประเมินเมื่อ ${analyzedTime}`;
   }
 
   let risk = 'normal';
@@ -3363,7 +3397,18 @@ function renderAiAnalysis(data) {
       </div>
     ` : ''}
 
-    <!-- 4. Bottom Status Sub-bar -->
+    <!-- 4. Warning Bar When AI Call is Not Configured or Failed -->
+    ${!isGeminiSuccess ? `
+      <div class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm mt-1">
+        <div class="flex items-center gap-2">
+          <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0"></i>
+          <span class="font-bold">⚠️ โหมดประเมินอัตโนมัติ (ยังไม่ได้เชื่อมต่อ Gemini API Key)</span>
+        </div>
+        <span class="text-[11px] text-amber-400/80 font-mono">เวลาประเมิน: ${analyzedTime}</span>
+      </div>
+    ` : ''}
+
+    <!-- 5. Bottom Status Sub-bar -->
     <div class="pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
       <div class="flex items-center gap-2 text-slate-300">
         <span class="p-1 rounded-md bg-slate-800 text-sky-400 shrink-0">
@@ -3372,14 +3417,21 @@ function renderAiAnalysis(data) {
         <span class="text-slate-400 text-[11px]">แนวโน้ม 6-12 ชม.:</span>
         <span class="font-bold text-sky-300 text-xs">${trend6h}</span>
       </div>
-      <div class="flex items-center gap-2.5 text-[11px] text-slate-400 font-mono">
+      <div class="flex items-center gap-2.5 text-[11px] text-slate-300 font-mono">
+        ${isGeminiSuccess ? `
+          <span class="px-2.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-400/40 text-[10px] font-bold flex items-center gap-1">
+            <i data-lucide="zap" class="w-3 h-3 text-amber-400"></i>
+            <span>⚡ วิเคราะห์ด้วย Gemini 3.5 Flash Lite</span>
+          </span>
+        ` : `
+          <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700/60">
+            ระบบวิเคราะห์อุทกวิทยา
+          </span>
+        `}
+        <span class="text-slate-600">•</span>
         <span class="flex items-center gap-1">
           <i data-lucide="clock" class="w-3 h-3 text-slate-500"></i>
-          <span>${formattedTime}</span>
-        </span>
-        <span class="text-slate-600">•</span>
-        <span class="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700/60">
-          ${isGemini ? 'Gemini 1.5 Flash' : 'ระบบวิเคราะห์อุทกวิทยา'}
+          <span>${analyzedTime}</span>
         </span>
       </div>
     </div>
@@ -3427,7 +3479,7 @@ async function initWaterHistoryChart() {
   renderStationSelectorButtons();
 
   try {
-    const res = await fetch(`/api/water-history?station=${encodeURIComponent(currentChartStationId)}`);
+    const res = await fetch(`/api/water-history?station=${encodeURIComponent(currentChartStationId)}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     historicalDataCache = data.stations || {};
@@ -3539,7 +3591,7 @@ async function selectStationChart(stationId) {
   if (overlay) overlay.classList.remove('hidden');
 
   try {
-    const res = await fetch(`/api/water-history?station=${encodeURIComponent(stationId)}`);
+    const res = await fetch(`/api/water-history?station=${encodeURIComponent(stationId)}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
