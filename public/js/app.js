@@ -4115,7 +4115,7 @@ function renderStationSelectorButtons() {
       : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800';
 
     return `
-      <button type="button" onclick="selectStationChart('${st.id}')" aria-label="ดูกราฟประวัติระดับน้ำ ${st.stCode} ${st.name}" class="min-h-[44px] px-3.5 py-2 rounded-xl border text-xs whitespace-nowrap transition touch-manipulation flex items-center gap-1.5 shrink-0 ${activeClass}">
+      <button type="button" onclick="selectStationChart('${st.id}')" aria-label="ดูกราฟประวัติระดับน้ำ ${st.stCode} ${st.name}" class="min-h-[44px] px-3.5 py-2 rounded-xl border text-xs whitespace-nowrap shrink-0 transition touch-manipulation flex items-center gap-1.5 ${activeClass}">
         <span class="font-mono font-bold">${st.stCode}</span>
         <span class="text-[11px] truncate max-w-[120px]">${st.canal}</span>
       </button>
@@ -4163,6 +4163,89 @@ function viewStationHistory(stationId) {
   }
 }
 window.viewStationHistory = viewStationHistory;
+
+function calculateChartTrend(values) {
+  const numericValues = Array.isArray(values)
+    ? values.map(value => Number(value)).filter(Number.isFinite)
+    : [];
+  if (numericValues.length === 0) {
+    return {
+      icon: 'minus',
+      text: 'แนวโน้มทรงตัว',
+      className: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+    };
+  }
+
+  const latest = numericValues[numericValues.length - 1];
+  const previousStart = Math.max(0, numericValues.length - 4);
+  const previousValues = numericValues.slice(previousStart, -1);
+  const previousAverage = previousValues.length > 0
+    ? previousValues.reduce((sum, value) => sum + value, 0) / previousValues.length
+    : latest;
+  const recentDelta = latest - previousAverage;
+  const range = Math.max(...numericValues) - Math.min(...numericValues);
+
+  let directionChanges = 0;
+  let previousDirection = 0;
+  for (let index = 1; index < numericValues.length; index++) {
+    const delta = numericValues[index] - numericValues[index - 1];
+    const direction = Math.abs(delta) < 0.01 ? 0 : Math.sign(delta);
+    if (direction !== 0 && previousDirection !== 0 && direction !== previousDirection) {
+      directionChanges++;
+    }
+    if (direction !== 0) previousDirection = direction;
+  }
+
+  if (recentDelta <= -0.10) {
+    return {
+      icon: 'trending-down',
+      text: 'แนวโน้มลดลงรวดเร็ว',
+      className: 'bg-sky-500/15 text-sky-300 border-sky-400/40'
+    };
+  }
+  if (recentDelta >= 0.10) {
+    return {
+      icon: 'trending-up',
+      text: 'แนวโน้มเพิ่มขึ้นรวดเร็ว',
+      className: 'bg-orange-500/15 text-orange-300 border-orange-400/40'
+    };
+  }
+  if (range > 0.25 && directionChanges >= 2) {
+    return {
+      icon: recentDelta < -0.03 ? 'waves' : 'activity',
+      text: recentDelta < -0.03
+        ? 'แนวโน้มผันผวน (ลดลงช่วงท้าย)'
+        : 'แนวโน้มผันผวน',
+      className: 'bg-violet-500/15 text-violet-300 border-violet-400/40'
+    };
+  }
+  if (range < 0.05) {
+    return {
+      icon: 'minus',
+      text: 'แนวโน้มทรงตัว',
+      className: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+    };
+  }
+  if (recentDelta < -0.03) {
+    return {
+      icon: 'trending-down',
+      text: 'แนวโน้มลดลง',
+      className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/40'
+    };
+  }
+  if (recentDelta > 0.03) {
+    return {
+      icon: 'trending-up',
+      text: 'แนวโน้มเพิ่มขึ้น',
+      className: 'bg-amber-500/15 text-amber-300 border-amber-400/40'
+    };
+  }
+  return {
+    icon: 'minus',
+    text: 'แนวโน้มทรงตัว',
+    className: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+  };
+}
 
 function renderWaterHistoryChart(stationId, liveData) {
   if (typeof Chart === 'undefined') {
@@ -4262,20 +4345,14 @@ function renderWaterHistoryChart(stationId, liveData) {
     }
   }
 
-  // Update Trend Pill
+  // Update Trend Pill from the latest 3-hour movement and 24-hour volatility.
   const trendPill = document.getElementById('chartTrendPill');
   const trendText = document.getElementById('chartTrendText');
   if (trendPill && trendText) {
-    if (st.trend === 'rising') {
-      trendPill.className = 'px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 shadow-sm';
-      trendText.textContent = 'แนวโน้มเพิ่มขึ้น';
-    } else if (st.trend === 'falling') {
-      trendPill.className = 'px-2.5 py-1 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm';
-      trendText.textContent = 'แนวโน้มลดลง';
-    } else {
-      trendPill.className = 'px-2.5 py-1 rounded-xl text-xs font-semibold bg-sky-500/10 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 shadow-sm';
-      trendText.textContent = 'แนวโน้มทรงตัว';
-    }
+    const trend = calculateChartTrend(st.waterLevels);
+    trendPill.className = `px-2.5 py-1 rounded-xl text-xs font-semibold ${trend.className} flex items-center gap-1.5 shadow-sm`;
+    trendPill.innerHTML = `<i data-lucide="${trend.icon}" class="w-3.5 h-3.5"></i><span id="chartTrendText">${trend.text}</span>`;
+    if (window.lucide) window.lucide.createIcons();
   }
 
   // Update Stats Tiles (Matching latest level 1:1)
