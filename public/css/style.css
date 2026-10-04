@@ -431,6 +431,7 @@ body.emergency-active {
 
 .leaflet-popup-content {
   margin: 12px 14px !important;
+  max-width: 290px !important;
   line-height: 1.4 !important;
   font-family: 'Prompt', sans-serif !important;
 }

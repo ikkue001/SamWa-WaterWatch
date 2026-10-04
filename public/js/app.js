@@ -186,6 +186,7 @@ let mapStationMarkers = {};
 let mapUserMarker = null;
 let mapProximityCircle = null;
 let mapJunctionPolylines = [];
+const popupHistoryCache = new Map();
 
 // Haversine Formula for distance calculation in kilometers
 function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
@@ -1197,6 +1198,97 @@ function initLeafletMap() {
 window.initMap = initLeafletMap;
 window.initLeafletMap = initLeafletMap;
 
+function formatPopupTime(value) {
+  const parsed = parseStationTimestamp(value);
+  if (!parsed) return value || '--:-- น.';
+  return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')} น.`;
+}
+
+function getPopupHistoryValues(station) {
+  const rawValues = station.waterLevels || station.history || station.waterHistory;
+  const values = Array.isArray(rawValues)
+    ? rawValues.map(value => Number(value)).filter(Number.isFinite).slice(-24)
+    : [];
+  if (values.length > 1) return values;
+
+  const current = Number(station.waterLevel ?? station.inside?.level);
+  if (!Number.isFinite(current)) return [];
+  const trend = String(station.trend || '').toLowerCase();
+  const direction = trend === 'rising' ? 1 : (trend === 'falling' ? -1 : 0);
+  return Array.from({ length: 12 }, (_, index) => current - direction * (11 - index) * 0.01);
+}
+
+function drawStationPopupSparkline(station, values = getPopupHistoryValues(station)) {
+  const canvas = document.getElementById(`popup-chart-${station.id}`);
+  if (!canvas || !values || values.length < 2) return;
+
+  const width = Math.max(canvas.clientWidth || 250, 180);
+  const height = 55;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.height = `${height}px`;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  const padding = { top: 5, right: 3, bottom: 5, left: 3 };
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(max - min, 0.02);
+  const xStep = (width - padding.left - padding.right) / (values.length - 1);
+  const y = value => padding.top + (1 - ((value - min) / range)) * (height - padding.top - padding.bottom);
+
+  const critical = Number(station.criticalLevel);
+  if (Number.isFinite(critical) && critical >= min && critical <= max) {
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y(critical));
+    ctx.lineTo(width - padding.right, y(critical));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  values.forEach((value, index) => {
+    const x = padding.left + index * xStep;
+    if (index === 0) ctx.moveTo(x, y(value));
+    else ctx.lineTo(x, y(value));
+  });
+  ctx.stroke();
+}
+
+async function renderStationPopupSparkline(station) {
+  drawStationPopupSparkline(station);
+  if (popupHistoryCache.has(station.id)) {
+    drawStationPopupSparkline(station, popupHistoryCache.get(station.id));
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/water-history?station=${encodeURIComponent(station.id)}`, { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    const values = (data.selectedStation?.waterLevels || data.waterLevels || [])
+      .map(value => Number(value))
+      .filter(Number.isFinite)
+      .slice(-24);
+    if (values.length > 1) {
+      popupHistoryCache.set(station.id, values);
+      drawStationPopupSparkline(station, values);
+    }
+  } catch (err) {
+    console.warn('[Popup Sparkline] History unavailable:', err);
+  }
+}
+
 /**
  * Update Leaflet Map Markers & Proximity Circle
  */
@@ -1323,6 +1415,11 @@ function updateMapMarkers() {
       : `<div class="text-xs text-slate-400 mt-1.5 flex items-center gap-1"><i data-lucide="navigation" class="w-3.5 h-3.5"></i> ยังไม่ได้ระบุพิกัด GPS</div>`;
 
     const sourceUrl = getStationSourceUrl(station);
+    const popupChartId = `popup-chart-${station.id}`;
+    const trendText = station.trendText || (
+      String(station.trend || '').toLowerCase() === 'rising' ? 'เพิ่มขึ้น' :
+      String(station.trend || '').toLowerCase() === 'falling' ? 'ลดลง' : 'ทรงตัว'
+    );
 
     let bodyPopupHtml = '';
     if (station.isGate && station.inside && station.outside) {
@@ -1357,13 +1454,6 @@ function updateMapMarkers() {
               <b class="font-bold text-white font-mono">${station.gateOpening ? `${station.gateOpening.toFixed(2)} ม.` : '0.43 ม.'}</b>
             </div>
           </div>
-          <!-- Official Source Link -->
-          <div class="mt-2 pt-1.5 border-t border-white/10 text-center">
-            <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="text-[11px] ${station.isStale ? 'text-amber-400 font-bold hover:text-amber-300' : 'text-sky-400 hover:text-sky-300 font-semibold'} inline-flex items-center gap-1 transition">
-              <span>🌐 เปิดหน้าเว็บทางการสถานีนี้</span>
-              <i data-lucide="external-link" class="w-3 h-3"></i>
-            </a>
-          </div>
         </div>
 
         <!-- Limits for both sides -->
@@ -1393,13 +1483,6 @@ function updateMapMarkers() {
           </div>
           <div class="text-[11px] font-semibold mt-0.5 ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')}">
             ${formatFriendlyDiffText(station.waterLevel, station.bankLevel, station.criticalLevel)}
-          </div>
-          <!-- Official Source Link -->
-          <div class="mt-2 pt-1.5 border-t border-white/10 text-center">
-            <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="text-[11px] ${station.isStale ? 'text-amber-400 font-bold hover:text-amber-300' : 'text-sky-400 hover:text-sky-300 font-semibold'} inline-flex items-center gap-1 transition">
-              <span>🌐 เปิดหน้าเว็บทางการสถานีนี้</span>
-              <i data-lucide="external-link" class="w-3 h-3"></i>
-            </a>
           </div>
         </div>
 
@@ -1433,19 +1516,21 @@ function updateMapMarkers() {
         <p class="text-[11px] text-slate-400 mt-0.5">${station.location || ''}</p>
 
         ${bodyPopupHtml}
+        <div class="mt-2 pt-2 border-t border-white/10">
+          <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <span>แนวโน้ม 24 ชม.</span>
+            <b class="text-sky-300">${trendText}</b>
+          </div>
+          <canvas id="${popupChartId}" height="55" class="w-full mt-1"></canvas>
+        </div>
 
         ${distText}
 
-        <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-          <span>เวลา: <b class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : ''}">${station.updatedAt}</b> ${station.isStale && station.staleText ? `<span class="text-[10px] text-amber-400/90">(${station.staleText})</span>` : ''}</span>
-          <div class="flex items-center gap-2">
+        <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+          <span class="whitespace-nowrap">เวลา: <b class="${station.isStale ? 'text-amber-400 font-mono font-semibold' : 'font-mono'}">${formatPopupTime(station.updatedAt || station.time)}</b> ${station.isStale && station.staleText ? `<span class="text-[10px] text-amber-400/90">(${station.staleText})</span>` : ''}</span>
+          <div class="flex items-center gap-2 shrink-0">
             <a href="${sourceUrl}" target="_blank" rel="noopener noreferrer" class="${station.isStale ? 'text-amber-300 hover:text-amber-200' : 'text-sky-400 hover:text-sky-300'} font-semibold flex items-center gap-1">
-              <span>ต้นทาง</span>
-              <i data-lucide="external-link" class="w-3 h-3"></i>
-            </a>
-            <span class="text-white/20">|</span>
-            <a href="https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lng}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:text-sky-300 font-semibold flex items-center gap-1">
-              <span>นำทาง</span>
+              <span>ต้นทาง ↗</span>
               <i data-lucide="external-link" class="w-3 h-3"></i>
             </a>
           </div>
@@ -1453,7 +1538,7 @@ function updateMapMarkers() {
       </div>
     `;
 
-    const popupOptions = { maxWidth: station.isGate ? 340 : 320, autoPan: false };
+    const popupOptions = { maxWidth: 290, minWidth: 250, autoPan: false };
     const staleTag = station.isStale ? ' [ข้อมูลไม่อัปเดต]' : '';
     const tooltipText = `<b>${pinBadge}: ${station.name}${staleTag}</b>`;
 
@@ -1461,6 +1546,10 @@ function updateMapMarkers() {
       mapStationMarkers[station.id].setLatLng([station.lat, station.lng]);
       mapStationMarkers[station.id].setIcon(customIcon);
       mapStationMarkers[station.id].setPopupContent(popupHtml);
+      mapStationMarkers[station.id].off('popupopen');
+      mapStationMarkers[station.id].on('popupopen', () => {
+        renderStationPopupSparkline(station);
+      });
       if (mapStationMarkers[station.id].getTooltip()) {
         mapStationMarkers[station.id].setTooltipContent(tooltipText);
       }
@@ -1468,6 +1557,9 @@ function updateMapMarkers() {
       const marker = L.marker([station.lat, station.lng], { icon: customIcon }).addTo(leafletMap);
       marker.bindPopup(popupHtml, popupOptions);
       marker.bindTooltip(tooltipText, { direction: 'top', offset: [0, -14], opacity: 0.95 });
+      marker.on('popupopen', () => {
+        renderStationPopupSparkline(station);
+      });
 
       // Stop marker click event from propagating to the map
       marker.on('click', (e) => {
