@@ -622,42 +622,65 @@ function applyDataUpdate(data) {
  * คำนวณสัดส่วนความสูงของหลอดน้ำ (Gauge Math Calculation) ตามสเกลจริง 100%
  * @param {number|null} current ระดับน้ำปัจจุบัน (ม.รทก.)
  * @param {number} critical ระดับวิกฤติ (ม.รทก.)
- * @param {number} overflow ระดับตลิ่ง (ม.รทก.)
- * @param {number|undefined} base ระดับท้องคลอง (ถ้ามี)
- * @param {number|undefined} warning ระดับเตือนภัย (ถ้ามี)
- * @returns {{ waterPct: number, criticalPct: number, overflowPct: number }}
+ * Unified Gauge Scale Math
+ * Calculates percentage positions from bottom (0% to 100%) for water fill, critical line, and overflow line.
+ * Guaranteed bottom-anchored scale math:
+ *  - When current < critical => waterPct < criticalPct
+ *  - When current == critical => waterPct == criticalPct
+ *  - When current > critical => waterPct > criticalPct (water mass clearly rises above the critical line)
+ *  - When current >= overflow => waterPct >= overflowPct (water mass overflows the bank line)
  */
+function getGaugeScales(station) {
+  if (!station) return { current: 0, critical: 0, overflow: 0, waterPct: 50, criticalPct: 70, overflowPct: 90 };
+
+  // ดึงค่าตัวเลขอย่างปลอดภัย รองรับทุกชื่อคีย์
+  const rawCurrent = station.currentLevel ?? station.waterLevel ?? station.level ?? station.value ?? station.current ?? 0;
+  const rawCritical = station.criticalThreshold ?? station.criticalLevel ?? station.critical ?? 0;
+  const rawOverflow = station.overflowThreshold ?? station.bankLevel ?? station.overflow ?? station.bank ?? 0;
+
+  const current = !isNaN(parseFloat(rawCurrent)) ? parseFloat(rawCurrent) : 0;
+  const critical = !isNaN(parseFloat(rawCritical)) ? parseFloat(rawCritical) : 0;
+  const overflow = !isNaN(parseFloat(rawOverflow)) ? parseFloat(rawOverflow) : 0;
+
+  // กำหนดจุดต่ำสุด (Min) และสูงสุด (Max) ของสเกลหลอดแก้ว
+  // กำหนดฐานล่างให้ต่ำกว่าค่าน้ำต่ำสุดหรือเกณฑ์เตือนภัยเสมอ
+  const minVal = Math.min(current, critical > 0 ? critical - 0.6 : current - 0.5) - 0.2;
+  // กำหนดขอบบนให้สูงกว่าระดับตลิ่งเล็กน้อย
+  const maxVal = (overflow > 0 ? overflow : critical + 0.4) + 0.2;
+  const range = maxVal - minVal;
+
+  if (range <= 0) return { current, critical, overflow, waterPct: 50, criticalPct: 70, overflowPct: 90 };
+
+  // คำนวณความสูง % จากฐานล่าง (0% - 100%)
+  const waterPct = Math.max(6, Math.min(100, ((current - minVal) / range) * 100));
+  const criticalPct = Math.max(5, Math.min(95, ((critical - minVal) / range) * 100));
+  const overflowPct = Math.max(10, Math.min(96, ((overflow - minVal) / range) * 100));
+
+  return {
+    current,
+    critical,
+    overflow,
+    waterPct: Number(waterPct.toFixed(1)),
+    criticalPct: Number(criticalPct.toFixed(1)),
+    overflowPct: Number(overflowPct.toFixed(1))
+  };
+}
+window.getGaugeScales = getGaugeScales;
+
 function calculateGaugePcts(current, critical, overflow, base, warning) {
-  const crit = Number(critical);
-  const over = Number(overflow);
-  const cur = (current !== null && current !== undefined && Number.isFinite(Number(current)))
-    ? Number(current)
-    : null;
-
-  // กำหนดช่วงสเกลอ้างอิงของสถานี
-  // minVal: กำหนดให้ต่ำกว่าเกณฑ์เตือนภัย/วิกฤติลงไปอย่างน้อย 0.5 - 0.8 ม.
-  const baseWarning = (warning !== undefined && Number.isFinite(Number(warning)))
-    ? Number(warning)
-    : (crit - 0.4);
-
-  // minVal: อ้างอิงจุดต่ำสุดโดยคำนึงถึงทั้งระดับน้ำปัจจุบัน และเกณฑ์เตือนภัย
-  let minVal = Math.min(cur !== null ? cur : baseWarning, baseWarning) - 0.3;
-  if (base !== undefined && Number.isFinite(Number(base)) && Number(base) < minVal) {
-    minVal = Number(base);
-  }
-
-  // maxVal: กำหนดให้สูงกว่าระดับตลิ่งขึ้นไปเล็กน้อย เพื่อให้เห็นขอบตลิ่ง
-  const maxVal = over + 0.15;
-  const range = Math.max(maxVal - minVal, 0.2);
-
-  // คำนวณเป็น % จากฐานล่าง (0% ถึง 100%)
-  const toPct = (val) => Math.min(100, Math.max(0, ((val - minVal) / range) * 100));
-
-  const waterPct = cur !== null ? toPct(cur) : 5;
-  const criticalPct = toPct(crit);
-  const overflowPct = toPct(over);
-
-  return { waterPct, criticalPct, overflowPct };
+  const scales = getGaugeScales({
+    currentLevel: current,
+    criticalThreshold: critical,
+    overflowThreshold: overflow
+  });
+  return {
+    current: scales.current,
+    critical: scales.critical,
+    overflow: scales.overflow,
+    waterPct: scales.waterPct,
+    criticalPct: scales.criticalPct,
+    overflowPct: scales.overflowPct
+  };
 }
 window.calculateGaugePcts = calculateGaugePcts;
 
@@ -676,65 +699,75 @@ function updateExistingCardsIfPresent(stations) {
 
       // 1. Sluice Gate Station Dual-Side In-Place Updates
       if (station.isGate && station.inside && station.outside) {
-        const inBank = parseFloat(station.inside?.bank ?? 1.30);
-        const inCrit = parseFloat(station.inside?.critical ?? (inBank * 0.85));
+        const inScales = getGaugeScales({
+          currentLevel: station.inside?.level ?? station.inside?.waterLevel,
+          criticalThreshold: station.inside?.critical ?? 0.80,
+          overflowThreshold: station.inside?.bank ?? 1.30
+        });
+
+        const outScales = getGaugeScales({
+          currentLevel: station.outside?.level ?? station.outside?.waterLevel,
+          criticalThreshold: station.outside?.critical ?? 1.30,
+          overflowThreshold: station.outside?.bank ?? 1.70
+        });
+
+        let inFillGrad = inScales.current >= inScales.overflow && inScales.overflow > 0
+          ? 'from-rose-600 to-red-500'
+          : (inScales.current >= inScales.critical && inScales.critical > 0 ? 'from-amber-600 to-amber-400' : 'from-cyan-600 to-cyan-400');
+
+        let outFillGrad = outScales.current >= outScales.overflow && outScales.overflow > 0
+          ? 'from-rose-600 to-red-500'
+          : (outScales.current >= outScales.critical && outScales.critical > 0 ? 'from-amber-600 to-amber-400' : 'from-cyan-600 to-cyan-400');
+
         const rawInLvl = station.inside?.level ?? station.inside?.waterLevel ?? null;
         const inLvl = (rawInLvl !== null && rawInLvl !== undefined && !isNaN(parseFloat(rawInLvl))) ? parseFloat(rawInLvl) : null;
-        const inPcts = calculateGaugePcts(inLvl, inCrit, inBank, station.inside?.baseLevel, station.inside?.warning);
-
-        const outBank = parseFloat(station.outside?.bank ?? 1.70);
-        const outCrit = parseFloat(station.outside?.critical ?? (outBank * 0.85));
-        const rawOutLvl = station.outside?.level ?? station.outside?.waterLevel ?? null;
-        const outLvl = (rawOutLvl !== null && rawOutLvl !== undefined && !isNaN(parseFloat(rawOutLvl))) ? parseFloat(rawOutLvl) : null;
-        const outPcts = calculateGaugePcts(outLvl, outCrit, outBank, station.outside?.baseLevel, station.outside?.warning);
-
-        let inFillGrad = 'from-cyan-600 to-cyan-400';
-        if (station.inside?.isOverflow) inFillGrad = 'from-rose-600 to-red-500';
-        else if (station.inside?.isWarning) inFillGrad = 'from-amber-600 to-yellow-400';
-
-        let outFillGrad = 'from-cyan-600 to-cyan-400';
-        if (station.outside?.isOverflow) outFillGrad = 'from-rose-600 to-red-500';
-        else if (station.outside?.isWarning) outFillGrad = 'from-amber-600 to-yellow-400';
+        const inBank = inScales.overflow;
+        const inCrit = inScales.critical;
 
         // Inside elements
         document.querySelectorAll(`[data-station-inside-fill="${station.id}"]`).forEach(fill => {
-          fill.setAttribute('data-target-height', inPcts.waterPct);
-          fill.style.height = `${inPcts.waterPct}%`;
-          fill.className = `absolute bottom-0 left-0 w-full bg-gradient-to-t ${inFillGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1`;
+          fill.setAttribute('data-target-height', inScales.waterPct);
+          fill.style.setProperty('height', `${inScales.waterPct}%`, 'important');
+          fill.className = `absolute bottom-0 left-0 w-full bg-gradient-to-t ${inFillGrad} transition-all duration-500 rounded-b-xl flex items-end justify-center pb-1 z-10`;
         });
         document.querySelectorAll(`[data-station-inside-overflow-line="${station.id}"]`).forEach(line => {
-          line.style.bottom = `${inPcts.overflowPct}%`;
+          line.style.setProperty('bottom', `${inScales.overflowPct}%`, 'important');
         });
         document.querySelectorAll(`[data-station-inside-critical-line="${station.id}"]`).forEach(line => {
-          line.style.bottom = `${inPcts.criticalPct}%`;
+          line.style.setProperty('bottom', `${inScales.criticalPct}%`, 'important');
         });
         document.querySelectorAll(`[data-station-inside-level="${station.id}"]`).forEach(el => {
           el.textContent = inLvl !== null ? inLvl.toFixed(2) : '--';
         });
         document.querySelectorAll(`[data-station-inside-level-sub="${station.id}"]`).forEach(el => {
-          el.textContent = `${inLvl !== null ? inLvl.toFixed(2) : '--'} ม.`;
+          el.textContent = inLvl !== null ? `${inLvl.toFixed(2)} ม.` : '-- ม.';
         });
         document.querySelectorAll(`[data-station-inside-diff="${station.id}"]`).forEach(el => {
           el.textContent = formatFriendlyDiffText(rawInLvl, inBank, inCrit) || station.inside?.diffText || 'ปกติ';
         });
 
+        const rawOutLvl = station.outside?.level ?? station.outside?.waterLevel ?? null;
+        const outLvl = (rawOutLvl !== null && rawOutLvl !== undefined && !isNaN(parseFloat(rawOutLvl))) ? parseFloat(rawOutLvl) : null;
+        const outBank = outScales.overflow;
+        const outCrit = outScales.critical;
+
         // Outside elements
         document.querySelectorAll(`[data-station-outside-fill="${station.id}"]`).forEach(fill => {
-          fill.setAttribute('data-target-height', outPcts.waterPct);
-          fill.style.height = `${outPcts.waterPct}%`;
-          fill.className = `absolute bottom-0 left-0 w-full bg-gradient-to-t ${outFillGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1`;
+          fill.setAttribute('data-target-height', outScales.waterPct);
+          fill.style.setProperty('height', `${outScales.waterPct}%`, 'important');
+          fill.className = `absolute bottom-0 left-0 w-full bg-gradient-to-t ${outFillGrad} transition-all duration-500 rounded-b-xl flex items-end justify-center pb-1 z-10`;
         });
         document.querySelectorAll(`[data-station-outside-overflow-line="${station.id}"]`).forEach(line => {
-          line.style.bottom = `${outPcts.overflowPct}%`;
+          line.style.setProperty('bottom', `${outScales.overflowPct}%`, 'important');
         });
         document.querySelectorAll(`[data-station-outside-critical-line="${station.id}"]`).forEach(line => {
-          line.style.bottom = `${outPcts.criticalPct}%`;
+          line.style.setProperty('bottom', `${outScales.criticalPct}%`, 'important');
         });
         document.querySelectorAll(`[data-station-outside-level="${station.id}"]`).forEach(el => {
           el.textContent = outLvl !== null ? outLvl.toFixed(2) : '--';
         });
         document.querySelectorAll(`[data-station-outside-level-sub="${station.id}"]`).forEach(el => {
-          el.textContent = `${outLvl !== null ? outLvl.toFixed(2) : '--'} ม.`;
+          el.textContent = outLvl !== null ? `${outLvl.toFixed(2)} ม.` : '-- ม.';
         });
         document.querySelectorAll(`[data-station-outside-diff="${station.id}"]`).forEach(el => {
           el.textContent = formatFriendlyDiffText(rawOutLvl, outBank, outCrit) || station.outside?.diffText || 'ปกติ';
@@ -750,12 +783,12 @@ function updateExistingCardsIfPresent(stations) {
       }
 
       // 2. Standard Single-Side Station In-Place Updates
-      const bank = parseFloat(station.bankLevel || 2.0);
-      const critical = parseFloat(station.criticalLevel || (bank * 0.85));
-      const rawLevel = station.waterLevel ?? station.level ?? station.inside?.level ?? null;
+      const rawLevel = station.currentLevel ?? station.waterLevel ?? station.level ?? station.inside?.level ?? null;
       const hasValidLevel = rawLevel !== null && rawLevel !== undefined && rawLevel !== '' && !isNaN(parseFloat(rawLevel));
       const levelNum = hasValidLevel ? parseFloat(rawLevel) : null;
-      const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(levelNum, critical, bank, station.baseLevel, station.warningLevel);
+      const scales = getGaugeScales(station);
+      const { waterPct, criticalPct, overflowPct, critical, overflow } = scales;
+      const bank = overflow;
 
       let fillGrad = 'from-cyan-600 to-cyan-400';
       let statusClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
@@ -766,11 +799,11 @@ function updateExistingCardsIfPresent(stations) {
         statusText = 'ไม่มีข้อมูล / รอตรวจวัด';
         statusClass = 'bg-slate-800 text-slate-300 border-slate-700';
         diffClass = 'text-slate-400';
-      } else if (station.isOverflow) {
+      } else if (station.isOverflow || (hasValidLevel && levelNum >= bank && bank > 0)) {
         fillGrad = 'from-rose-600 to-red-500';
         statusClass = 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse';
         diffClass = 'text-red-400';
-      } else if (station.isWarning) {
+      } else if (station.isWarning || (hasValidLevel && levelNum >= critical && critical > 0)) {
         fillGrad = 'from-amber-600 to-yellow-400';
         statusClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
         diffClass = 'text-amber-400';
@@ -784,19 +817,19 @@ function updateExistingCardsIfPresent(stations) {
         // Update fills
         document.querySelectorAll(`[data-station-fill="${tid}"]`).forEach(fill => {
           fill.setAttribute('data-target-height', waterPct);
-          fill.style.height = `${waterPct}%`;
-          fill.className = `absolute bottom-0 left-0 w-full bg-gradient-to-t ${fillGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1`;
+          fill.style.setProperty('height', `${waterPct}%`, 'important');
+          fill.className = `absolute bottom-0 left-0 w-full bg-gradient-to-t ${fillGrad} transition-all duration-500 rounded-b-xl flex items-end justify-center pb-1 z-10`;
         });
 
         // Update overflow line & critical line
         document.querySelectorAll(`[data-station-overflow-line="${tid}"]`).forEach(line => {
-          line.style.bottom = `${overflowPct}%`;
+          line.style.setProperty('bottom', `${overflowPct}%`, 'important');
         });
         document.querySelectorAll(`[data-station-overflow-label="${tid}"]`).forEach(label => {
           label.textContent = `ตลิ่ง ${bank.toFixed(2)}m`;
         });
         document.querySelectorAll(`[data-station-critical-line="${tid}"]`).forEach(line => {
-          line.style.bottom = `${criticalPct}%`;
+          line.style.setProperty('bottom', `${criticalPct}%`, 'important');
         });
         document.querySelectorAll(`[data-station-critical-label="${tid}"]`).forEach(label => {
           label.textContent = `วิกฤติ ${critical.toFixed(2)}m`;
@@ -805,6 +838,9 @@ function updateExistingCardsIfPresent(stations) {
         // Update water level text
         document.querySelectorAll(`[data-station-level="${tid}"]`).forEach(el => {
           el.textContent = levelNum !== null ? levelNum.toFixed(2) : '--';
+        });
+        document.querySelectorAll(`[data-station-level-sub="${tid}"]`).forEach(el => {
+          el.textContent = levelNum !== null ? `${levelNum.toFixed(2)} ม.` : '-- ม.';
         });
 
         // Update diff text and color
@@ -3241,16 +3277,15 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
     fillGrad = 'bg-gradient-to-t from-amber-600 to-yellow-400';
   }
 
-  const bank = parseFloat(station.bankLevel || 2.0);
-  const critical = parseFloat(station.criticalLevel || 1.8);
-  const overflow = bank;
+  const scales = getGaugeScales(station);
+  const { waterPct, criticalPct, overflowPct, current, critical, overflow } = scales;
+  const bank = overflow;
   const level = (station.waterLevel !== null && station.waterLevel !== undefined) ? parseFloat(station.waterLevel) : null;
-  const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(level, critical, overflow, station.baseLevel, station.warningLevel);
 
   let waterGrad = 'from-cyan-600 to-cyan-400';
-  if (isDanger) {
+  if (isDanger || (level !== null && level >= overflow && overflow > 0)) {
     waterGrad = 'from-rose-600 to-red-500';
-  } else if (isWarning) {
+  } else if (isWarning || (level !== null && level >= critical && critical > 0)) {
     waterGrad = 'from-amber-600 to-yellow-400';
   }
 
@@ -3314,20 +3349,24 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
         </div>
 
         <!-- Gauge Bar (Click to view 24h history chart) -->
-        <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${station.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${station.id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${station.name}" class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 mb-3 cursor-pointer group hover:border-sky-400/50 transition" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม.">
-          <!-- เส้นขีดตลิ่ง (สีแดง) -->
-          <div data-station-overflow-line="${station.id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${overflowPct}%">
-            <span data-station-overflow-label="${station.id}" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${overflow.toFixed(2)}m</span>
+        <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${station.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${station.id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${station.name}" class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 mb-3 cursor-pointer group hover:border-sky-400/50 transition" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม.">
+          <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+          <div data-station-overflow-line="${station.id}" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${overflowPct}% !important;">
+            <span data-station-overflow-label="${station.id}" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">
+              ตลิ่ง ${overflow.toFixed(2)}m
+            </span>
           </div>
 
-          <!-- เส้นประวิกฤติ (สีเหลือง) -->
-          <div data-station-critical-line="${station.id}" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: ${criticalPct}%">
-            <span data-station-critical-label="${station.id}" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ ${critical.toFixed(2)}m</span>
+          <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+          <div data-station-critical-line="${station.id}" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${criticalPct}% !important;">
+            <span data-station-critical-label="${station.id}" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">
+              วิกฤติ ${critical.toFixed(2)}m
+            </span>
           </div>
 
-          <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-          <div data-station-fill="${station.id}" data-target-height="${waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${waterGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: ${waterPct}%">
-            <span data-station-level-sub="${station.id}" class="text-xs font-bold text-white drop-shadow">${level !== null ? level.toFixed(2) : '--'} ม.</span>
+          <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+          <div data-station-fill="${station.id}" data-target-height="${waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${waterGrad} rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: ${waterPct}% !important;">
+            <span data-station-level-sub="${station.id}" class="text-xs font-bold text-white drop-shadow font-mono">${level !== null ? `${level.toFixed(2)} ม.` : '-- ม.'}</span>
           </div>
         </div>
 
@@ -3385,13 +3424,18 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   }
 
   // Inside parameters
-  const inside = station.inside || { label: 'ด้านใน', level: 0.93, warning: 0.70, critical: 0.80, bank: 1.30 };
-  const inLevel = (inside.level !== null && inside.level !== undefined) ? parseFloat(inside.level) : null;
-  const inBank = parseFloat(inside.bank || 1.30);
-  const inCritical = parseFloat(inside.critical || 0.80);
-  const inPcts = calculateGaugePcts(inLevel, inCritical, inBank, inside.baseLevel, inside.warning);
-  const inIsDanger = inside.isOverflow;
-  const inIsWarning = inside.isWarning;
+  const inside = station.inside || { label: 'ด้านใน', level: 0.86, warning: 0.70, critical: 0.80, bank: 1.30 };
+  const inRawLevel = inside.level ?? inside.waterLevel ?? station.insideLevel;
+  const inLevel = (inRawLevel !== null && inRawLevel !== undefined && !isNaN(parseFloat(inRawLevel))) ? parseFloat(inRawLevel) : null;
+  const inScales = getGaugeScales({
+    currentLevel: inLevel !== null ? inLevel : 0,
+    criticalThreshold: inside.critical ?? 0.80,
+    overflowThreshold: inside.bank ?? 1.30
+  });
+  const inBank = inScales.overflow;
+  const inCritical = inScales.critical;
+  const inIsDanger = inside.isOverflow || (inLevel !== null && inLevel >= inBank && inBank > 0);
+  const inIsWarning = inside.isWarning || (inLevel !== null && inLevel >= inCritical && inCritical > 0);
 
   let inBadgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
   let inWaterGrad = 'from-cyan-600 to-cyan-400';
@@ -3400,17 +3444,22 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
     inWaterGrad = 'from-rose-600 to-red-500';
   } else if (inIsWarning) {
     inBadgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
-    inWaterGrad = 'from-amber-600 to-yellow-400';
+    inWaterGrad = 'from-amber-600 to-amber-400';
   }
 
   // Outside parameters
-  const outside = station.outside || { label: 'ด้านนอก', level: 1.39, warning: 1.10, critical: 1.30, bank: 1.70 };
-  const outLevel = (outside.level !== null && outside.level !== undefined) ? parseFloat(outside.level) : null;
-  const outBank = parseFloat(outside.bank || 1.70);
-  const outCritical = parseFloat(outside.critical || 1.30);
-  const outPcts = calculateGaugePcts(outLevel, outCritical, outBank, outside.baseLevel, outside.warning);
-  const outIsDanger = outside.isOverflow;
-  const outIsWarning = outside.isWarning;
+  const outside = station.outside || { label: 'ด้านนอก', level: 1.34, warning: 1.10, critical: 1.30, bank: 1.70 };
+  const outRawLevel = outside.level ?? outside.waterLevel ?? station.outsideLevel;
+  const outLevel = (outRawLevel !== null && outRawLevel !== undefined && !isNaN(parseFloat(outRawLevel))) ? parseFloat(outRawLevel) : null;
+  const outScales = getGaugeScales({
+    currentLevel: outLevel !== null ? outLevel : 0,
+    criticalThreshold: outside.critical ?? 1.30,
+    overflowThreshold: outside.bank ?? 1.70
+  });
+  const outBank = outScales.overflow;
+  const outCritical = outScales.critical;
+  const outIsDanger = outside.isOverflow || (outLevel !== null && outLevel >= outBank && outBank > 0);
+  const outIsWarning = outside.isWarning || (outLevel !== null && outLevel >= outCritical && outCritical > 0);
 
   let outBadgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
   let outWaterGrad = 'from-cyan-600 to-cyan-400';
@@ -3498,20 +3547,24 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
               </div>
 
               <!-- Inside Gauge -->
-              <div class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 mb-2">
-                <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                <div data-station-inside-overflow-line="${station.id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${inPcts.overflowPct}%">
-                  <span class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${inBank.toFixed(2)}m</span>
+              <div class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 mb-2">
+                <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                <div data-station-inside-overflow-line="${station.id}" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${inScales.overflowPct}% !important;">
+                  <span class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">
+                    ตลิ่ง ${inBank.toFixed(2)}m
+                  </span>
                 </div>
 
-                <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                <div data-station-inside-critical-line="${station.id}" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: ${inPcts.criticalPct}%">
-                  <span class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ ${inCritical.toFixed(2)}m</span>
+                <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                <div data-station-inside-critical-line="${station.id}" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${inScales.criticalPct}% !important;">
+                  <span class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">
+                    วิกฤติ ${inCritical.toFixed(2)}m
+                  </span>
                 </div>
 
-                <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                <div data-station-inside-fill="${station.id}" data-target-height="${inPcts.waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${inWaterGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: ${inPcts.waterPct}%">
-                  <span data-station-inside-level-sub="${station.id}" class="text-xs font-bold text-white drop-shadow">${inLevel !== null ? inLevel.toFixed(2) : '--'} ม.</span>
+                <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                <div data-station-inside-fill="${station.id}" data-target-height="${inScales.waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${inWaterGrad} rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: ${inScales.waterPct}% !important;">
+                  <span data-station-inside-level-sub="${station.id}" class="text-xs font-bold text-white drop-shadow font-mono">${inLevel !== null ? `${inLevel.toFixed(2)} ม.` : '-- ม.'}</span>
                 </div>
               </div>
 
@@ -3581,20 +3634,24 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
               </div>
 
               <!-- Outside Gauge -->
-              <div class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 mb-2">
-                <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                <div data-station-outside-overflow-line="${station.id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${outPcts.overflowPct}%">
-                  <span class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${outBank.toFixed(2)}m</span>
+              <div class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 mb-2">
+                <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                <div data-station-outside-overflow-line="${station.id}" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${outScales.overflowPct}% !important;">
+                  <span class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">
+                    ตลิ่ง ${outBank.toFixed(2)}m
+                  </span>
                 </div>
 
-                <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                <div data-station-outside-critical-line="${station.id}" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: ${outPcts.criticalPct}%">
-                  <span class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ ${outCritical.toFixed(2)}m</span>
+                <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                <div data-station-outside-critical-line="${station.id}" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${outScales.criticalPct}% !important;">
+                  <span class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">
+                    วิกฤติ ${outCritical.toFixed(2)}m
+                  </span>
                 </div>
 
-                <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                <div data-station-outside-fill="${station.id}" data-target-height="${outPcts.waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${outWaterGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: ${outPcts.waterPct}%">
-                  <span data-station-outside-level-sub="${station.id}" class="text-xs font-bold text-white drop-shadow">${outLevel !== null ? outLevel.toFixed(2) : '--'} ม.</span>
+                <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                <div data-station-outside-fill="${station.id}" data-target-height="${outScales.waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${outWaterGrad} rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: ${outScales.waterPct}% !important;">
+                  <span data-station-outside-level-sub="${station.id}" class="text-xs font-bold text-white drop-shadow font-mono">${outLevel !== null ? `${outLevel.toFixed(2)} ม.` : '-- ม.'}</span>
                 </div>
               </div>
 
@@ -3674,11 +3731,11 @@ function renderPinnedPriorityCard(station, canon, idx) {
     const updateTime = formatCardDateTime(station?.updatedAt ?? station?.time ?? station?.timestamp);
 
     // 4. Thresholds & Status
-    const bank = parseFloat(station?.bankLevel ?? canon?.bankLevel ?? 2.0);
-    const critical = parseFloat(station?.criticalLevel ?? canon?.criticalLevel ?? 1.8);
-    const overflow = bank;
-    const isDanger = station?.isOverflow ?? (levelNum !== null && levelNum >= bank);
-    const isWarning = station?.isWarning ?? (levelNum !== null && levelNum >= critical);
+    const scales = getGaugeScales(station || canon);
+    const { waterPct, criticalPct, overflowPct, current, critical, overflow } = scales;
+    const bank = overflow;
+    const isDanger = station?.isOverflow ?? (levelNum !== null && levelNum >= bank && bank > 0);
+    const isWarning = station?.isWarning ?? (levelNum !== null && levelNum >= critical && critical > 0);
 
     let cardBorder = 'border-slate-800';
     let badgeClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
@@ -3698,9 +3755,6 @@ function renderPinnedPriorityCard(station, canon, idx) {
       waterGrad = 'from-amber-600 to-yellow-400';
     }
 
-    const base = station?.baseLevel ?? canon?.baseLevel;
-    const warningLvl = station?.warningLevel ?? canon?.warningLevel;
-    const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(levelNum, critical, overflow, base, warningLvl);
     const diffText = formatFriendlyDiffText(levelNum, bank, critical);
 
     const distanceBadge = (station?.distanceKm !== null && station?.distanceKm !== undefined)
@@ -3780,20 +3834,24 @@ function renderPinnedPriorityCard(station, canon, idx) {
 
             <!-- Mini vertical gauge (Click to view 24h history chart) -->
             <div class="col-span-5 flex flex-col items-center">
-              <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${canon.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${canon.id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${station?.name ?? canon.name}" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-                <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                <div data-station-overflow-line="${canon.id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${overflowPct}%">
-                  <span data-station-overflow-label="${canon.id}" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${overflow.toFixed(2)}m</span>
+              <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${canon.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${canon.id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${station?.name ?? canon.name}" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 cursor-pointer group hover:border-sky-400/50 transition">
+                <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                <div data-station-overflow-line="${canon.id}" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${overflowPct}% !important;">
+                  <span data-station-overflow-label="${canon.id}" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">
+                    ตลิ่ง ${overflow.toFixed(2)}m
+                  </span>
                 </div>
 
-                <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                <div data-station-critical-line="${canon.id}" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: ${criticalPct}%">
-                  <span data-station-critical-label="${canon.id}" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ ${critical.toFixed(2)}m</span>
+                <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                <div data-station-critical-line="${canon.id}" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${criticalPct}% !important;">
+                  <span data-station-critical-label="${canon.id}" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">
+                    วิกฤติ ${critical.toFixed(2)}m
+                  </span>
                 </div>
 
-                <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                <div data-station-fill="${canon.id}" data-target-height="${waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${waterGrad} transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: ${waterPct}%">
-                  <span data-station-level-sub="${canon.id}" class="text-xs font-bold text-white drop-shadow">${levelNum !== null ? levelNum.toFixed(2) : '--'} ม.</span>
+                <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                <div data-station-fill="${canon.id}" data-target-height="${waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t ${waterGrad} rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: ${waterPct}% !important;">
+                  <span data-station-level-sub="${canon.id}" class="text-xs font-bold text-white drop-shadow font-mono">${levelNum !== null ? `${levelNum.toFixed(2)} ม.` : '-- ม.'}</span>
                 </div>
               </div>
             </div>
@@ -3833,11 +3891,9 @@ function renderFallbackPinnedCard(canon, idx) {
   const id = canon?.id || 'unknown';
   const name = canon?.name || 'สถานีตรวจวัดระดับน้ำ';
   const location = canon?.location || 'รอยต่อปทุมธานี - กทม.';
-  const bank = parseFloat(canon?.bankLevel ?? 2.0);
-  const critical = parseFloat(canon?.criticalLevel ?? 1.8);
-  const overflow = bank;
-  const base = canon?.baseLevel;
-  const { waterPct, criticalPct, overflowPct } = calculateGaugePcts(null, critical, overflow, base, canon?.warningLevel);
+  const scales = getGaugeScales(canon);
+  const { waterPct, criticalPct, overflowPct, critical, overflow } = scales;
+  const bank = overflow;
   const lat = canon?.lat ?? 13.93;
   const lng = canon?.lng ?? 100.75;
 
@@ -3898,20 +3954,24 @@ function renderFallbackPinnedCard(canon, idx) {
           </div>
 
           <div class="col-span-5 flex flex-col items-center">
-            <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${name}" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-              <!-- เส้นขีดตลิ่ง (สีแดง) -->
-              <div data-station-overflow-line="${id}" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: ${overflowPct}%">
-                <span data-station-overflow-label="${id}" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง ${overflow.toFixed(2)}m</span>
+            <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('${id}')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ${name}" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 cursor-pointer group hover:border-sky-400/50 transition">
+              <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+              <div data-station-overflow-line="${id}" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${overflowPct}% !important;">
+                <span data-station-overflow-label="${id}" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">
+                  ตลิ่ง ${overflow.toFixed(2)}m
+                </span>
               </div>
 
-              <!-- เส้นประวิกฤติ (สีเหลือง) -->
-              <div data-station-critical-line="${id}" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: ${criticalPct}%">
-                <span data-station-critical-label="${id}" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ ${critical.toFixed(2)}m</span>
+              <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+              <div data-station-critical-line="${id}" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: ${criticalPct}% !important;">
+                <span data-station-critical-label="${id}" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">
+                  วิกฤติ ${critical.toFixed(2)}m
+                </span>
               </div>
 
-              <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-              <div data-station-fill="${id}" data-target-height="${waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: ${waterPct}%">
-                <span data-station-level-sub="${id}" class="text-xs font-bold text-white drop-shadow">-- ม.</span>
+              <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+              <div data-station-fill="${id}" data-target-height="${waterPct}" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: ${waterPct}% !important;">
+                <span data-station-level-sub="${id}" class="text-xs font-bold text-white drop-shadow font-mono">-- ม.</span>
               </div>
             </div>
           </div>

@@ -949,20 +949,20 @@
               </div>
 
               <div class="col-span-5 flex flex-col items-center">
-                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('thaiwater_k8')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('thaiwater_k8')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-1" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-                  <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                  <div data-station-overflow-line="thaiwater_k8" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: 86.96%">
-                    <span data-station-overflow-label="thaiwater_k8" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.71m</span>
+                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('thaiwater_k8')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('thaiwater_k8')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-1" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 cursor-pointer group hover:border-sky-400/50 transition">
+                  <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                  <div data-station-overflow-line="thaiwater_k8" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 84.6% !important;">
+                    <span data-station-overflow-label="thaiwater_k8" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.71m</span>
                   </div>
 
-                  <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                  <div data-station-critical-line="thaiwater_k8" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: 60.87%">
-                    <span data-station-critical-label="thaiwater_k8" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 2.41m</span>
+                  <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                  <div data-station-critical-line="thaiwater_k8" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 61.5% !important;">
+                    <span data-station-critical-label="thaiwater_k8" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 2.41m</span>
                   </div>
 
-                  <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                  <div data-station-fill="thaiwater_k8" data-target-height="5" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: 5%">
-                    <span data-station-level-sub="thaiwater_k8" class="text-xs font-bold text-white drop-shadow">-- ม.</span>
+                  <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                  <div data-station-fill="thaiwater_k8" data-target-height="6" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: 6% !important;">
+                    <span data-station-level-sub="thaiwater_k8" class="text-xs font-bold text-white drop-shadow font-mono">-- ม.</span>
                   </div>
                 </div>
               </div>
@@ -1050,20 +1050,20 @@
               </div>
 
               <div class="col-span-5 flex flex-col items-center">
-                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('bma_wf_k0801')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('bma_wf_k0801')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-2" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-                  <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                  <div data-station-overflow-line="bma_wf_k0801" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: 85.71%">
-                    <span data-station-overflow-label="bma_wf_k0801" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.00m</span>
+                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('bma_wf_k0801')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('bma_wf_k0801')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-2" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 cursor-pointer group hover:border-sky-400/50 transition">
+                  <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                  <div data-station-overflow-line="bma_wf_k0801" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 83.3% !important;">
+                    <span data-station-overflow-label="bma_wf_k0801" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.00m</span>
                   </div>
 
-                  <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                  <div data-station-critical-line="bma_wf_k0801" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: 66.67%">
-                    <span data-station-critical-label="bma_wf_k0801" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 1.80m</span>
+                  <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                  <div data-station-critical-line="bma_wf_k0801" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 66.7% !important;">
+                    <span data-station-critical-label="bma_wf_k0801" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 1.80m</span>
                   </div>
 
-                  <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                  <div data-station-fill="bma_wf_k0801" data-target-height="5" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: 5%">
-                    <span data-station-level-sub="bma_wf_k0801" class="text-xs font-bold text-white drop-shadow">-- ม.</span>
+                  <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                  <div data-station-fill="bma_wf_k0801" data-target-height="6" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: 6% !important;">
+                    <span data-station-level-sub="bma_wf_k0801" class="text-xs font-bold text-white drop-shadow font-mono">-- ม.</span>
                   </div>
                 </div>
               </div>
@@ -1151,20 +1151,20 @@
               </div>
 
               <div class="col-span-5 flex flex-col items-center">
-                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('bma_wf_khw01')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('bma_wf_khw01')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-3" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-                  <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                  <div data-station-overflow-line="bma_wf_khw01" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: 86.96%">
-                    <span data-station-overflow-label="bma_wf_khw01" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.30m</span>
+                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('bma_wf_khw01')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('bma_wf_khw01')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-3" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 cursor-pointer group hover:border-sky-400/50 transition">
+                  <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                  <div data-station-overflow-line="bma_wf_khw01" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 84.6% !important;">
+                    <span data-station-overflow-label="bma_wf_khw01" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.30m</span>
                   </div>
 
-                  <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                  <div data-station-critical-line="bma_wf_khw01" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: 60.87%">
-                    <span data-station-critical-label="bma_wf_khw01" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 2.00m</span>
+                  <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                  <div data-station-critical-line="bma_wf_khw01" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 61.5% !important;">
+                    <span data-station-critical-label="bma_wf_khw01" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 2.00m</span>
                   </div>
 
-                  <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                  <div data-station-fill="bma_wf_khw01" data-target-height="5" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: 5%">
-                    <span data-station-level-sub="bma_wf_khw01" class="text-xs font-bold text-white drop-shadow">-- ม.</span>
+                  <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                  <div data-station-fill="bma_wf_khw01" data-target-height="6" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: 6% !important;">
+                    <span data-station-level-sub="bma_wf_khw01" class="text-xs font-bold text-white drop-shadow font-mono">-- ม.</span>
                   </div>
                 </div>
               </div>
@@ -1252,20 +1252,20 @@
               </div>
 
               <div class="col-span-5 flex flex-col items-center">
-                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('bma_wf_swa02')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('bma_wf_swa02')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-4" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-32 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/60 cursor-pointer group hover:border-sky-400/50 transition">
-                  <!-- เส้นขีดตลิ่ง (สีแดง) -->
-                  <div data-station-overflow-line="bma_wf_swa02" class="absolute w-full border-t border-rose-500/80 z-10 flex justify-end pr-1" style="bottom: 85.71%">
-                    <span data-station-overflow-label="bma_wf_swa02" class="text-[9px] bg-rose-950/80 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.00m</span>
+                <div role="button" tabindex="0" onclick="event.stopPropagation(); viewStationHistory('bma_wf_swa02')" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();viewStationHistory('bma_wf_swa02')}" aria-label="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม. ของ ST-4" title="คลิกเพื่อดูกราฟระดับน้ำย้อนหลัง 24 ชม." class="relative w-full h-28 bg-slate-950/80 rounded-xl overflow-hidden border border-slate-800 cursor-pointer group hover:border-sky-400/50 transition">
+                  <!-- เส้นระดับตลิ่ง (สีแดง) วางจาก bottom เสมอ -->
+                  <div data-station-overflow-line="bma_wf_swa02" class="absolute left-0 w-full border-t border-rose-500/80 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 83.3% !important;">
+                    <span data-station-overflow-label="bma_wf_swa02" class="text-[9px] bg-rose-950/90 text-rose-300 px-1 rounded -translate-y-1/2">ตลิ่ง 2.00m</span>
                   </div>
 
-                  <!-- เส้นประวิกฤติ (สีเหลือง) -->
-                  <div data-station-critical-line="bma_wf_swa02" class="absolute w-full border-t border-dashed border-amber-400/90 z-10 flex justify-end pr-1" style="bottom: 66.67%">
-                    <span data-station-critical-label="bma_wf_swa02" class="text-[9px] bg-amber-950/80 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 1.80m</span>
+                  <!-- เส้นระดับวิกฤติ (สีเหลืองประ) วางจาก bottom เสมอ -->
+                  <div data-station-critical-line="bma_wf_swa02" class="absolute left-0 w-full border-t border-dashed border-amber-400 z-20 flex justify-end pr-1 pointer-events-none" style="bottom: 66.7% !important;">
+                    <span data-station-critical-label="bma_wf_swa02" class="text-[9px] bg-amber-950/90 text-amber-300 px-1 rounded -translate-y-1/2">วิกฤติ 1.80m</span>
                   </div>
 
-                  <!-- มวลน้ำสีฟ้า (คำนวณความสูงจริงจาก bottom) -->
-                  <div data-station-fill="bma_wf_swa02" data-target-height="5" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 transition-all duration-700 rounded-b-xl flex items-end justify-center pb-1" style="height: 5%">
-                    <span data-station-level-sub="bma_wf_swa02" class="text-xs font-bold text-white drop-shadow">-- ม.</span>
+                  <!-- มวลน้ำ (ใส่ความสูง inline style จาก bottom เสมอ) -->
+                  <div data-station-fill="bma_wf_swa02" data-target-height="6" class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-cyan-600 to-cyan-400 rounded-b-xl flex items-end justify-center pb-1 transition-all duration-500 z-10" style="height: 6% !important;">
+                    <span data-station-level-sub="bma_wf_swa02" class="text-xs font-bold text-white drop-shadow font-mono">-- ม.</span>
                   </div>
                 </div>
               </div>
