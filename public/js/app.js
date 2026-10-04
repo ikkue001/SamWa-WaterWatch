@@ -634,13 +634,13 @@ function getGaugeScales(station) {
   if (!station) return { current: 0, critical: 0, overflow: 0, waterPct: 50, criticalPct: 70, overflowPct: 90 };
 
   // ดึงค่าตัวเลขอย่างปลอดภัย รองรับทุกชื่อคีย์
-  const rawCurrent = station.currentLevel ?? station.waterLevel ?? station.level ?? station.value ?? station.current ?? 0;
-  const rawCritical = station.criticalThreshold ?? station.criticalLevel ?? station.critical ?? 0;
-  const rawOverflow = station.overflowThreshold ?? station.bankLevel ?? station.overflow ?? station.bank ?? 0;
-
-  const current = !isNaN(parseFloat(rawCurrent)) ? parseFloat(rawCurrent) : 0;
-  const critical = !isNaN(parseFloat(rawCritical)) ? parseFloat(rawCritical) : 0;
-  const overflow = !isNaN(parseFloat(rawOverflow)) ? parseFloat(rawOverflow) : 0;
+  const toNumber = value => {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const current = toNumber(station.currentLevel ?? station.waterLevel ?? station.level ?? station.value ?? 0);
+  const critical = toNumber(station.criticalThreshold ?? station.criticalLevel ?? station.critical ?? 0);
+  const overflow = toNumber(station.overflowThreshold ?? station.bankLevel ?? station.overflow ?? station.bank ?? 0);
 
   // กำหนดจุดต่ำสุด (Min) และสูงสุด (Max) ของสเกลหลอดแก้ว
   // กำหนดฐานล่างให้ต่ำกว่าค่าน้ำต่ำสุดหรือเกณฑ์เตือนภัยเสมอ
@@ -666,6 +666,21 @@ function getGaugeScales(station) {
   };
 }
 window.getGaugeScales = getGaugeScales;
+
+function getSluiceGateSideScales(station, side) {
+  const sideData = side === 'inside' ? station?.inside : station?.outside;
+  const isSt9 = station?.stCode === 'ST-9' || station?.id === 'bma_weather_21';
+  const defaults = side === 'inside'
+    ? { critical: 0.80, overflow: 1.30 }
+    : { critical: 1.30, overflow: 1.70 };
+
+  return getGaugeScales({
+    currentLevel: sideData?.level ?? sideData?.waterLevel,
+    criticalThreshold: isSt9 ? defaults.critical : (sideData?.critical ?? defaults.critical),
+    overflowThreshold: isSt9 ? defaults.overflow : (sideData?.bank ?? defaults.overflow)
+  });
+}
+window.getSluiceGateSideScales = getSluiceGateSideScales;
 
 function calculateGaugePcts(current, critical, overflow, base, warning) {
   const scales = getGaugeScales({
@@ -699,17 +714,8 @@ function updateExistingCardsIfPresent(stations) {
 
       // 1. Sluice Gate Station Dual-Side In-Place Updates
       if (station.isGate && station.inside && station.outside) {
-        const inScales = getGaugeScales({
-          currentLevel: station.inside?.level ?? station.inside?.waterLevel,
-          criticalThreshold: station.inside?.critical ?? 0.80,
-          overflowThreshold: station.inside?.bank ?? 1.30
-        });
-
-        const outScales = getGaugeScales({
-          currentLevel: station.outside?.level ?? station.outside?.waterLevel,
-          criticalThreshold: station.outside?.critical ?? 1.30,
-          overflowThreshold: station.outside?.bank ?? 1.70
-        });
+        const inScales = getSluiceGateSideScales(station, 'inside');
+        const outScales = getSluiceGateSideScales(station, 'outside');
 
         let inFillGrad = inScales.current >= inScales.overflow && inScales.overflow > 0
           ? 'from-rose-600 to-red-500'
@@ -988,7 +994,7 @@ function triggerWaterFillTransitions() {
       document.querySelectorAll('[data-target-height]').forEach(el => {
         const target = el.getAttribute('data-target-height');
         if (target) {
-          el.style.height = `${target}%`;
+          el.style.setProperty('height', `${target}%`, 'important');
         }
       });
     });
@@ -3280,7 +3286,9 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
   const scales = getGaugeScales(station);
   const { waterPct, criticalPct, overflowPct, current, critical, overflow } = scales;
   const bank = overflow;
-  const level = (station.waterLevel !== null && station.waterLevel !== undefined) ? parseFloat(station.waterLevel) : null;
+  const rawLevel = station.currentLevel ?? station.waterLevel ?? station.level ?? station.value;
+  const parsedLevel = parseFloat(rawLevel);
+  const level = Number.isFinite(parsedLevel) ? parsedLevel : null;
 
   let waterGrad = 'from-cyan-600 to-cyan-400';
   if (isDanger || (level !== null && level >= overflow && overflow > 0)) {
@@ -3338,13 +3346,13 @@ function renderCanalFlowCard(station, badgeCode, totalCount, isHighlightNearby =
           <div class="flex items-baseline justify-between">
             <div class="flex items-baseline gap-1.5">
               <span data-station-level="${station.id}" class="text-2xl sm:text-3xl font-black text-white font-mono-numbers">
-                ${(station.waterLevel !== null && station.waterLevel !== undefined) ? station.waterLevel.toFixed(2) : '--'}
+                ${level !== null ? level.toFixed(2) : '--'}
               </span>
               <span class="text-[10px] sm:text-xs text-slate-400 font-normal cursor-help border-b border-dotted border-slate-600 hover:text-sky-300 transition" title="ม.รทก. = เมตรจากระดับน้ำทะเลปานกลาง (ระดับอ้างอิงมาตรฐาน)">ม.รทก.</span>
             </div>
           </div>
           <div data-station-diff="${station.id}" class="text-[11px] mt-1 font-semibold ${station.diff >= 0 ? 'text-red-400' : (isWarning ? 'text-amber-400' : 'text-emerald-400')} truncate">
-            ${formatFriendlyDiffText(station.waterLevel, station.bankLevel, station.criticalLevel)}
+            ${formatFriendlyDiffText(level, critical, overflow)}
           </div>
         </div>
 
@@ -3427,11 +3435,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const inside = station.inside || { label: 'ด้านใน', level: 0.86, warning: 0.70, critical: 0.80, bank: 1.30 };
   const inRawLevel = inside.level ?? inside.waterLevel ?? station.insideLevel;
   const inLevel = (inRawLevel !== null && inRawLevel !== undefined && !isNaN(parseFloat(inRawLevel))) ? parseFloat(inRawLevel) : null;
-  const inScales = getGaugeScales({
-    currentLevel: inLevel !== null ? inLevel : 0,
-    criticalThreshold: inside.critical ?? 0.80,
-    overflowThreshold: inside.bank ?? 1.30
-  });
+  const inScales = getSluiceGateSideScales(station, 'inside');
   const inBank = inScales.overflow;
   const inCritical = inScales.critical;
   const inIsDanger = inside.isOverflow || (inLevel !== null && inLevel >= inBank && inBank > 0);
@@ -3451,11 +3455,7 @@ function renderSluiceGateTwinCard(station, badgeCode, totalCount, isHighlightNea
   const outside = station.outside || { label: 'ด้านนอก', level: 1.34, warning: 1.10, critical: 1.30, bank: 1.70 };
   const outRawLevel = outside.level ?? outside.waterLevel ?? station.outsideLevel;
   const outLevel = (outRawLevel !== null && outRawLevel !== undefined && !isNaN(parseFloat(outRawLevel))) ? parseFloat(outRawLevel) : null;
-  const outScales = getGaugeScales({
-    currentLevel: outLevel !== null ? outLevel : 0,
-    criticalThreshold: outside.critical ?? 1.30,
-    overflowThreshold: outside.bank ?? 1.70
-  });
+  const outScales = getSluiceGateSideScales(station, 'outside');
   const outBank = outScales.overflow;
   const outCritical = outScales.critical;
   const outIsDanger = outside.isOverflow || (outLevel !== null && outLevel >= outBank && outBank > 0);
