@@ -1546,12 +1546,15 @@ function updateMapMarkers() {
         <p class="text-[11px] text-slate-400 mt-0.5">${station.location || ''}</p>
 
         ${bodyPopupHtml}
-        <div class="mt-2 pt-2 border-t border-white/10">
+        <div class="mt-2 pt-2 border border-slate-800 rounded-xl px-2 pb-1 cursor-pointer transition hover:border-cyan-400/80 hover:bg-slate-800/80 group" onclick="focusMainChart('${station.id}')" role="button" tabindex="0" aria-label="แตะเพื่อดูกราฟใหญ่ของ ${pinBadge}">
           <div class="flex items-center justify-between text-[10px] text-slate-400">
             <span>แนวโน้ม 24 ชม.</span>
-            <b class="text-sky-300">${trendText}</b>
+            <span class="text-[9px] text-cyan-400 opacity-80 group-hover:opacity-100">แตะเพื่อดูกราฟใหญ่ ↗</span>
           </div>
-          <canvas id="${popupChartId}" height="55" class="w-full mt-1"></canvas>
+          <div>
+            <b class="text-sky-300">${trendText}</b>
+            <canvas id="${popupChartId}" height="55" class="w-full mt-1"></canvas>
+          </div>
         </div>
 
         ${distText}
@@ -1904,10 +1907,10 @@ function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations
     // 🔴 TIER 3: EMERGENCY (เตือนภัยระดับสูง)
     card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-2xl relative overflow-hidden bg-gradient-to-r from-red-950/90 via-slate-900/90 to-slate-900/95 border-red-500/60 shadow-red-500/20 emergency-border-pulse';
     if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-red-500/20 rounded-full blur-3xl pointer-events-none animate-pulse';
-    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/20 text-2xl select-none animate-pulse';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/20 text-2xl select-none animate-pulse';
     if (icon) {
       icon.setAttribute('data-lucide', 'alert-octagon');
-      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-rose-400';
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7';
     }
     if (badge) {
       badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-red-500/30 text-red-200 border border-red-400/60 font-mono shadow-sm animate-pulse';
@@ -1944,10 +1947,10 @@ function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations
     // 🟡/🟠 TIER 2: WARNING (เฝ้าระวัง)
     card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-amber-950/80 via-slate-900/90 to-slate-900/95 border-amber-500/50 shadow-amber-500/10';
     if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-amber-500/15 rounded-full blur-3xl pointer-events-none';
-    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 text-2xl select-none';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20 text-2xl select-none';
     if (icon) {
       icon.setAttribute('data-lucide', 'alert-triangle');
-      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-amber-400';
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7';
     }
     if (badge) {
       badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-amber-500/25 text-amber-300 border border-amber-400/50 font-mono shadow-sm';
@@ -1982,10 +1985,10 @@ function updateHeroStatusSummary(liveOverflowAll, liveCriticalAll, staleStations
     // 🟢 TIER 1: NORMAL (ปกติ)
     card.className = 'rounded-2xl sm:rounded-3xl p-4 sm:p-5 border transition-all duration-300 shadow-xl relative overflow-hidden bg-gradient-to-r from-emerald-950/70 via-slate-900/90 to-slate-900/95 border-emerald-500/40';
     if (glow) glow.className = 'absolute -top-16 -right-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none';
-    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/15 text-2xl select-none';
+    if (iconWrap) iconWrap.className = 'w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-500/15 text-2xl select-none';
     if (icon) {
       icon.setAttribute('data-lucide', 'shield-check');
-      icon.className = 'w-6 h-6 sm:w-7 sm:h-7 text-emerald-400';
+      icon.className = 'w-6 h-6 sm:w-7 sm:h-7';
     }
     if (badge) {
       badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 font-mono';
@@ -4175,7 +4178,7 @@ function renderStationSelectorButtons() {
       : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-800';
 
     return `
-      <button type="button" onclick="selectStationChart('${st.id}')" aria-label="ดูกราฟประวัติระดับน้ำ ${st.stCode} ${st.name}" class="min-h-[44px] px-3.5 py-2 rounded-xl border text-xs whitespace-nowrap shrink-0 transition touch-manipulation flex items-center gap-1.5 ${activeClass}">
+      <button type="button" data-station-id="${st.id}" onclick="selectStationChart('${st.id}')" aria-label="ดูกราฟประวัติระดับน้ำ ${st.stCode} ${st.name}" class="min-h-[44px] px-3.5 py-2 rounded-xl border text-xs whitespace-nowrap shrink-0 transition touch-manipulation flex items-center gap-1.5 ${activeClass}">
         <span class="font-mono font-bold">${st.stCode}</span>
         <span class="text-[11px] truncate max-w-[120px]">${st.canal}</span>
       </button>
@@ -4214,6 +4217,26 @@ async function selectStationChart(stationId) {
   }
 }
 window.selectStationChart = selectStationChart;
+
+function focusMainChart(stationId) {
+  const chartSection = document.getElementById('waterHistorySection') ||
+    document.getElementById('trend-chart-section');
+  if (!chartSection) return;
+
+  const stationButton = document.querySelector(`[data-station-id="${stationId}"]`);
+  if (stationButton) {
+    stationButton.click();
+  } else {
+    selectStationChart(stationId);
+  }
+
+  chartSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  chartSection.classList.remove('main-chart-focus-flash');
+  void chartSection.offsetWidth;
+  chartSection.classList.add('main-chart-focus-flash');
+  setTimeout(() => chartSection.classList.remove('main-chart-focus-flash'), 1100);
+}
+window.focusMainChart = focusMainChart;
 
 function viewStationHistory(stationId) {
   selectStationChart(stationId);
