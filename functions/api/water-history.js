@@ -314,6 +314,14 @@ function sampleHourlyRows(rows, meta, now = new Date()) {
     timestamps: sampledTimestamps,
     timeLabels: sampledLabels,
     waterLevels: sampledLevels,
+    rawHistory: rows.map(r => ({
+      timestamp: r.date.toISOString(),
+      time: r.date.toISOString(),
+      timeLabel: formatThaiTimeLabel(r.date),
+      waterLevel: r.val,
+      waterLevelIn: r.valIn,
+      waterLevelOut: r.valOut
+    })),
     stats: {
       min: minLevel,
       max: maxLevel,
@@ -396,6 +404,14 @@ function sampleHourlyGateRows(rows, meta, now = new Date()) {
     waterLevels: waterLevelsOut,
     waterLevelsIn,
     waterLevelsOut,
+    rawHistory: rows.map(r => ({
+      timestamp: r.date.toISOString(),
+      time: r.date.toISOString(),
+      timeLabel: formatThaiTimeLabel(r.date),
+      waterLevel: r.valOut,
+      waterLevelIn: r.valIn,
+      waterLevelOut: r.valOut
+    })),
     headDifference: parseFloat((currentLevelIn - currentLevelOut).toFixed(2)),
     stats: {
       min: parseFloat(Math.min(...waterLevelsOut).toFixed(2)),
@@ -603,6 +619,12 @@ function createSafeBaselineHistory(meta, now = new Date()) {
     timestamps,
     timeLabels,
     waterLevels,
+    rawHistory: timestamps.map((ts, idx) => ({
+      timestamp: ts,
+      time: ts,
+      timeLabel: timeLabels[idx],
+      waterLevel: waterLevels[idx]
+    })),
     stats: {
       min: baseLvl,
       max: baseLvl,

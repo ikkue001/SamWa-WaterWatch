@@ -649,8 +649,12 @@
           </div>
         </div>
 
-        <!-- Trend Indicator Pill -->
-        <div class="flex items-center gap-2 shrink-0">
+        <!-- Trend Indicator Pill & Stale Warning Badge -->
+        <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <span id="chartStaleBadge" class="hidden px-2.5 py-1 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/40 items-center gap-1.5 shadow-sm animate-pulse">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            <span id="chartStaleBadgeText">⚠️ ข้อมูลไม่อัปเดต — ระดับน้ำคงค่าเดิม</span>
+          </span>
           <span id="chartTrendPill" class="px-2.5 py-1 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
             <i data-lucide="minus" class="w-3.5 h-3.5"></i>
             <span id="chartTrendText">แนวโน้มทรงตัว</span>
@@ -694,6 +698,10 @@
           <span id="chartOutsideLegend" class="hidden flex items-center gap-1.5">
             <span class="w-3.5 h-1 rounded bg-purple-400 inline-block shadow-sm"></span>
             <span>ระดับน้ำด้านนอก (ม.รทก.)</span>
+          </span>
+          <span id="chartStaleLegend" class="hidden flex items-center gap-1.5">
+            <span class="w-3.5 h-0.5 border-b-2 border-dashed border-amber-400 inline-block"></span>
+            <span class="text-amber-300 font-medium">ช่วงข้อมูลค้าง (คงค่าเดิม)</span>
           </span>
           <span class="flex items-center gap-1.5">
             <span class="w-3.5 h-0.5 border-b-2 border-dashed border-amber-400 inline-block"></span>

@@ -819,6 +819,14 @@ function sampleHourlyRowsServer(rows, meta, now = new Date()) {
     timestamps: sampledTimestamps,
     timeLabels: sampledLabels,
     waterLevels: sampledLevels,
+    rawHistory: rows.map(r => ({
+      timestamp: r.date.toISOString(),
+      time: r.date.toISOString(),
+      timeLabel: formatThaiTimeLabel(r.date),
+      waterLevel: r.val,
+      waterLevelIn: r.valIn,
+      waterLevelOut: r.valOut
+    })),
     stats: {
       min: minLevel,
       max: maxLevel,
@@ -992,6 +1000,12 @@ function createSafeBaselineHistoryServer(meta, anchorLevel, now = new Date()) {
     timestamps,
     timeLabels,
     waterLevels,
+    rawHistory: timestamps.map((ts, idx) => ({
+      timestamp: ts,
+      time: ts,
+      timeLabel: timeLabels[idx],
+      waterLevel: waterLevels[idx]
+    })),
     stats: {
       min: baseLvl,
       max: baseLvl,

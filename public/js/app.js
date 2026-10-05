@@ -4845,8 +4845,9 @@ function renderWaterHistoryChart(stationId, liveData) {
   // 1:1 Synchronization with Station Card Above
   // Find current water level on the corresponding card in Section 2 / Section 3
   let cardWaterLevel = null;
+  let cardSt = null;
   if (typeof appState !== 'undefined' && Array.isArray(appState.stations)) {
-    const cardSt = appState.stations.find(s => s.id === stationId || s.stCode === stationId || (st && (s.id === st.id || s.stCode === st.stCode)));
+    cardSt = appState.stations.find(s => s.id === stationId || s.stCode === stationId || (st && (s.id === st.id || s.stCode === st.stCode)));
     if (cardSt && cardSt.waterLevel !== null && cardSt.waterLevel !== undefined) {
       const parsed = parseFloat(cardSt.waterLevel);
       if (!isNaN(parsed) && parsed > 0) cardWaterLevel = parsed;
@@ -4860,39 +4861,130 @@ function renderWaterHistoryChart(stationId, liveData) {
     }
   }
 
-  // Enforce 1:1 exact match with card on the latest point (right-most point of chart)
-  if (cardWaterLevel !== null && !isNaN(cardWaterLevel)) {
-    st.currentLevel = cardWaterLevel;
-    if (st.waterLevels && st.waterLevels.length > 0) {
-      st.waterLevels[st.waterLevels.length - 1] = cardWaterLevel;
+  // 1. Build Raw History Array & Deduplicate Timestamps
+  let rawHistory = [];
+  if (Array.isArray(st.rawHistory) && st.rawHistory.length > 0) {
+    rawHistory = st.rawHistory.map(item => ({ ...item }));
+  } else if (Array.isArray(st.history) && st.history.length > 0) {
+    rawHistory = st.history.map(item => ({ ...item }));
+  } else if (Array.isArray(st.waterLevels)) {
+    rawHistory = st.waterLevels.map((lvl, idx) => ({
+      timestamp: (st.timestamps && st.timestamps[idx]) || null,
+      time: (st.timestamps && st.timestamps[idx]) || (st.timeLabels && st.timeLabels[idx]) || `${idx}`,
+      timeLabel: (st.timeLabels && st.timeLabels[idx]) || `${idx + 1}:00`,
+      waterLevel: Number(lvl),
+      waterLevelIn: isWaterGate && Array.isArray(waterLevelsIn) ? Number(waterLevelsIn[idx]) : undefined,
+      waterLevelOut: isWaterGate && Array.isArray(waterLevelsOut) ? Number(waterLevelsOut[idx]) : undefined
+    }));
+  }
+
+  // Filter out any previous synthetic/stale points if re-rendering from cache
+  rawHistory = rawHistory.filter(item => !item.isStale && !String(item.timeLabel || '').includes('(ปัจจุบัน)'));
+
+  // Sync latest raw point with card level if available
+  if (cardWaterLevel !== null && !isNaN(cardWaterLevel) && rawHistory.length > 0) {
+    const lastRaw = rawHistory[rawHistory.length - 1];
+    lastRaw.waterLevel = cardWaterLevel;
+    if (isWaterGate) lastRaw.waterLevelOut = cardWaterLevel;
+  }
+
+  // 1. กรองข้อมูลเวลาซ้ำ (Deduplicate Timestamps)
+  const uniqueHistory = [];
+  const seenTimes = new Set();
+  rawHistory.forEach(item => {
+    const timeKey = item.time || item.timestamp || item.timeLabel;
+    if (timeKey && !seenTimes.has(timeKey)) {
+      seenTimes.add(timeKey);
+      uniqueHistory.push(item);
     }
-    if (isWaterGate && st.waterLevelsOut?.length > 0) {
-      st.currentLevelOut = cardWaterLevel;
-      st.waterLevelsOut[st.waterLevelsOut.length - 1] = cardWaterLevel;
+  });
+
+  if (uniqueHistory.length === 0 && rawHistory.length > 0) {
+    uniqueHistory.push(...rawHistory);
+  }
+
+  // 2. ลากเส้นตรงต่อจนถึงเวลาปัจจุบันเมื่อข้อมูลหยุดส่ง (Forward Fill / Flatline to Now)
+  let isStale = false;
+  let diffHours = 0;
+
+  if (uniqueHistory.length > 0) {
+    const latestItem = uniqueHistory[uniqueHistory.length - 1];
+    let latestTime = NaN;
+    if (latestItem.timestamp) {
+      const d = parseStationTimestamp(latestItem.timestamp);
+      latestTime = d ? d.getTime() : new Date(latestItem.timestamp).getTime();
+    }
+    if (isNaN(latestTime) && latestItem.time) {
+      const d = parseStationTimestamp(latestItem.time);
+      latestTime = d ? d.getTime() : new Date(latestItem.time).getTime();
+    }
+    if (isNaN(latestTime) && cardSt) {
+      const cardTimeStr = cardSt.lastValidTime || cardSt.updatedAt || cardSt.time || cardSt.timestamp;
+      const d = parseStationTimestamp(cardTimeStr);
+      if (d) latestTime = d.getTime();
     }
 
-    const historyLevels = st.waterLevels
-      .map(value => Number(value))
-      .filter(Number.isFinite);
-    const currentLevel = Number(st.currentLevel ?? historyLevels[historyLevels.length - 1]);
-    const allLevels = Number.isFinite(currentLevel)
-      ? [...historyLevels, currentLevel]
-      : historyLevels;
-    const maxVal = allLevels.length > 0 ? Math.max(...allLevels) : null;
-    const minVal = allLevels.length > 0 ? Math.min(...allLevels) : null;
-    const diff24h = Number.isFinite(currentLevel) && historyLevels.length > 0
-      ? currentLevel - historyLevels[0]
-      : null;
-    const diff24hText = diff24h === null
-      ? '--'
-      : `${diff24h >= 0 ? '+' : ''}${diff24h.toFixed(2)}`;
-    st.stats = {
-      ...(st.stats || {}),
-      max: maxVal,
-      min: minVal,
-      change24h: diff24hText
-    };
+    const nowTime = Date.now();
+    if (!isNaN(latestTime)) {
+      diffHours = (nowTime - latestTime) / (1000 * 60 * 60);
+
+      // หากข้อมูลล่าสุดหยุดส่งนานเกิน 1 ชั่วโมง (เช่น ค้างตั้งแต่ 08:20 น.)
+      if (diffHours >= 1) {
+        isStale = true;
+        // เพิ่มจุดข้อมูลเสมือนที่เวลาปัจจุบัน โดยคงระดับน้ำล่าสุดไว้ (Forward Fill)
+        const nowFormatted = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        uniqueHistory.push({
+          timestamp: new Date().toISOString(),
+          time: new Date().toISOString(),
+          timeLabel: nowFormatted + ' (ปัจจุบัน)',
+          waterLevel: latestItem.waterLevel,
+          waterLevelIn: latestItem.waterLevelIn,
+          waterLevelOut: latestItem.waterLevelOut,
+          isStale: true
+        });
+      }
+    }
   }
+
+  // Populate back to station arrays for Chart.js
+  st.timeLabels = uniqueHistory.map(item => item.timeLabel);
+  st.waterLevels = uniqueHistory.map(item => item.waterLevel);
+  if (isWaterGate) {
+    st.waterLevelsIn = uniqueHistory.map(item => item.waterLevelIn ?? item.waterLevel);
+    st.waterLevelsOut = uniqueHistory.map(item => item.waterLevelOut ?? item.waterLevel);
+  }
+
+  // Enforce 1:1 exact match with card on current level and latest point
+  const currentLevelVal = cardWaterLevel ?? (st.waterLevels && st.waterLevels.length > 0 ? st.waterLevels[st.waterLevels.length - 1] : null);
+  st.currentLevel = currentLevelVal;
+  if (isWaterGate) {
+    st.currentLevelOut = currentLevelVal;
+    if (st.waterLevelsIn && st.waterLevelsIn.length > 0) {
+      st.currentLevelIn = st.waterLevelsIn[st.waterLevelsIn.length - 1];
+    }
+  }
+
+  const historyLevels = st.waterLevels
+    .map(value => Number(value))
+    .filter(Number.isFinite);
+  const currentLevel = Number(st.currentLevel ?? historyLevels[historyLevels.length - 1]);
+  const allLevels = Number.isFinite(currentLevel)
+    ? [...historyLevels, currentLevel]
+    : historyLevels;
+  const maxVal = allLevels.length > 0 ? Math.max(...allLevels) : null;
+  const minVal = allLevels.length > 0 ? Math.min(...allLevels) : null;
+  const diff24h = Number.isFinite(currentLevel) && historyLevels.length > 0
+    ? currentLevel - historyLevels[0]
+    : null;
+  const diff24hText = diff24h === null
+    ? '--'
+    : `${diff24h >= 0 ? '+' : ''}${diff24h.toFixed(2)}`;
+  st.stats = {
+    ...(st.stats || {}),
+    max: maxVal,
+    min: minVal,
+    change24h: diff24hText
+  };
 
   // Thresholds standard specs
   if (st.stCode === 'ST-1' || st.id === 'thaiwater_k8') {
@@ -4926,8 +5018,12 @@ function renderWaterHistoryChart(stationId, liveData) {
   st.criticalThreshold = st.criticalLevel;
   st.overflowThreshold = st.bankLevel;
 
-  const latestIn = waterLevelsIn[waterLevelsIn.length - 1];
-  const latestOut = waterLevelsOut[waterLevelsOut.length - 1];
+  const latestIn = isWaterGate && Array.isArray(st.waterLevelsIn) && st.waterLevelsIn.length > 0
+    ? st.waterLevelsIn[st.waterLevelsIn.length - (isStale ? 2 : 1)]
+    : null;
+  const latestOut = isWaterGate && Array.isArray(st.waterLevelsOut) && st.waterLevelsOut.length > 0
+    ? st.waterLevelsOut[st.waterLevelsOut.length - (isStale ? 2 : 1)]
+    : null;
   if (isWaterGate && Number.isFinite(latestIn) && Number.isFinite(latestOut)) {
     st.currentLevelIn = Number(st.currentLevelIn ?? latestIn);
     st.currentLevelOut = Number(st.currentLevelOut ?? latestOut);
@@ -4948,6 +5044,39 @@ function renderWaterHistoryChart(stationId, liveData) {
     } else {
       sourceBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1';
       sourceBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>ข้อมูลจริง สนน.กทม.</span>';
+    }
+  }
+
+  // 4. แสดงป้ายกำกับเตือนเมื่อข้อมูลค้าง (Stale Badge)
+  // หาก diffHours >= 2: ที่ Badge มุมขวาบนของกราฟ ให้แสดงป้ายสีส้มอำพัน:
+  // ⚠️ ข้อมูลไม่อัปเดต (${Math.round(diffHours)} ชม. ที่แล้ว) — ระดับน้ำคงค่าเดิม
+  const staleBadge = document.getElementById('chartStaleBadge');
+  const staleBadgeText = document.getElementById('chartStaleBadgeText');
+  if (staleBadge) {
+    if (diffHours >= 2) {
+      const roundedHours = Math.max(2, Math.round(diffHours));
+      const badgeText = `⚠️ ข้อมูลไม่อัปเดต (${roundedHours} ชม. ที่แล้ว) — ระดับน้ำคงค่าเดิม`;
+      if (staleBadgeText) {
+        staleBadgeText.textContent = badgeText;
+      } else {
+        staleBadge.textContent = badgeText;
+      }
+      staleBadge.classList.remove('hidden');
+      staleBadge.classList.add('flex');
+    } else {
+      staleBadge.classList.add('hidden');
+      staleBadge.classList.remove('flex');
+    }
+  }
+
+  const staleLegend = document.getElementById('chartStaleLegend');
+  if (staleLegend) {
+    if (isStale) {
+      staleLegend.classList.remove('hidden');
+      staleLegend.classList.add('flex');
+    } else {
+      staleLegend.classList.add('hidden');
+      staleLegend.classList.remove('flex');
     }
   }
 
@@ -5041,31 +5170,41 @@ function renderWaterHistoryChart(stationId, liveData) {
       datasets: [
         {
           label: isWaterGate ? 'ระดับน้ำด้านใน (ม.รทก.)' : 'ระดับน้ำ (ม.รทก.)',
-          data: isWaterGate ? waterLevelsIn : st.waterLevels,
+          data: isWaterGate ? st.waterLevelsIn : st.waterLevels,
           borderColor: '#38bdf8',
           borderWidth: 2.5,
           backgroundColor: isWaterGate ? 'transparent' : gradient,
           fill: !isWaterGate,
-          tension: 0.35,
-          pointRadius: 2.5,
+          tension: 0.1,
+          stepped: 'before',
+          pointRadius: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? 4.5 : 2.5),
           pointHoverRadius: 6,
-          pointBackgroundColor: '#38bdf8',
-          pointBorderColor: '#bae6fd',
-          pointBorderWidth: 1.5
+          pointBackgroundColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fb923c' : '#38bdf8'),
+          pointBorderColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fed7aa' : '#bae6fd'),
+          pointBorderWidth: 1.5,
+          segment: {
+            borderColor: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? '#fb923c' : undefined),
+            borderDash: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? [6, 4] : undefined)
+          }
         },
         ...(isWaterGate ? [{
           label: 'ระดับน้ำด้านนอก (ม.รทก.)',
-          data: waterLevelsOut,
+          data: st.waterLevelsOut,
           borderColor: '#c084fc',
           borderWidth: 2.5,
           backgroundColor: 'transparent',
           fill: false,
-          tension: 0.35,
-          pointRadius: 2.5,
+          tension: 0.1,
+          stepped: 'before',
+          pointRadius: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? 4.5 : 2.5),
           pointHoverRadius: 6,
-          pointBackgroundColor: '#c084fc',
-          pointBorderColor: '#f3e8ff',
-          pointBorderWidth: 1.5
+          pointBackgroundColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fb923c' : '#c084fc'),
+          pointBorderColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fed7aa' : '#f3e8ff'),
+          pointBorderWidth: 1.5,
+          segment: {
+            borderColor: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? '#fb923c' : undefined),
+            borderDash: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? [6, 4] : undefined)
+          }
         }] : []),
         ...(isWaterGate ? [
           gateThresholdDataset('เตือนภัยด้านใน', gateThresholds.in.warning, '#facc15'),
@@ -5120,19 +5259,22 @@ function renderWaterHistoryChart(stationId, liveData) {
           callbacks: {
             label: function(context) {
               const val = context.parsed.y;
+              const index = context.dataIndex;
+              const isStalePoint = isStale && index === uniqueHistory.length - 1;
+              const staleSuffix = isStalePoint ? ' (คงค่าเดิม - ข้อมูลค้าง)' : '';
+
               if (isWaterGate && (context.datasetIndex === 0 || context.datasetIndex === 1)) {
-                const index = context.dataIndex;
-                const inside = Number(waterLevelsIn[index]);
-                const outside = Number(waterLevelsOut[index]);
+                const inside = Number((st.waterLevelsIn || [])[index] ?? val);
+                const outside = Number((st.waterLevelsOut || [])[index] ?? val);
                 const difference = inside - outside;
                 return context.datasetIndex === 0
-                  ? ` ใน: ${inside.toFixed(2)} ม.รทก.`
-                  : ` นอก: ${outside.toFixed(2)} ม.รทก. | Δ ใน-นอก: ${difference >= 0 ? '+' : ''}${difference.toFixed(2)} ม.`;
+                  ? ` ใน: ${inside.toFixed(2)} ม.รทก.${staleSuffix}`
+                  : ` นอก: ${outside.toFixed(2)} ม.รทก. | Δ ใน-นอก: ${difference >= 0 ? '+' : ''}${difference.toFixed(2)} ม.${staleSuffix}`;
               }
               if (context.datasetIndex === 0) {
                 const diffCrit = (val - criticalVal).toFixed(2);
                 const diffStr = diffCrit >= 0 ? ` (+${diffCrit} ม. เหนือวิกฤติ)` : ` (${diffCrit} ม. ถึงวิกฤติ)`;
-                return ` ระดับน้ำ: ${val.toFixed(2)} ม.รทก.${diffStr}`;
+                return ` ระดับน้ำ: ${val.toFixed(2)} ม.รทก.${diffStr}${staleSuffix}`;
               }
               return ` ${context.dataset.label}`;
             }
