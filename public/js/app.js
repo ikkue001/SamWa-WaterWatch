@@ -232,6 +232,53 @@ function formatStationTitle(name) {
 }
 
 /**
+ * Safely parse any timestamp to Epoch Milliseconds (UTC+7 / Asia/Bangkok).
+ * Handles Thai Buddhist era (256x -> 202x), DD/MM/YYYY, ISO strings, and missing timezone offsets.
+ */
+function parseSafeTime(timeStr) {
+  if (!timeStr) return 0;
+  if (typeof timeStr === 'number') return isNaN(timeStr) ? 0 : timeStr;
+  if (timeStr instanceof Date) return isNaN(timeStr.getTime()) ? 0 : timeStr.getTime();
+
+  let cleanStr = timeStr.toString().trim();
+  if (!cleanStr) return 0;
+
+  // หากมีปี พ.ศ. (256x หรือ 25xx) ให้แปลงเป็น ค.ศ. (202x)
+  cleanStr = cleanStr.replace(/25(\d{2})/g, (m) => String(parseInt(m, 10) - 543));
+
+  // รองรับ format DD/MM/YYYY HH:mm(:ss)
+  const dmyMatch = cleanStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    const hour = dmyMatch[4].padStart(2, '0');
+    const minute = dmyMatch[5].padStart(2, '0');
+    const second = (dmyMatch[6] || '00').padStart(2, '0');
+    cleanStr = `${year}-${month}-${day}T${hour}:${minute}:${second}+07:00`;
+  } else {
+    // หากไม่มี Timezone กำกับ ให้เติม +07:00 (เวลาประเทศไทย UTC+7)
+    if (!cleanStr.includes('Z') && !cleanStr.includes('+')) {
+      cleanStr = cleanStr.replace(' ', 'T');
+      if (!cleanStr.includes('+') && !cleanStr.includes('Z')) {
+        cleanStr = cleanStr + '+07:00';
+      }
+    }
+  }
+
+  const t = new Date(cleanStr).getTime();
+  if (!isNaN(t)) return t;
+
+  if (typeof parseStationTimestamp === 'function') {
+    const d = parseStationTimestamp(timeStr);
+    if (d && !isNaN(d.getTime())) return d.getTime();
+  }
+
+  return 0;
+}
+window.parseSafeTime = parseSafeTime;
+
+/**
  * Universal timestamp parser supporting Thai Buddhist dates, ISO strings, and standard dates.
  */
 function parseStationTimestamp(timeStr, referenceDate = new Date()) {
@@ -4861,7 +4908,7 @@ function renderWaterHistoryChart(stationId, liveData) {
     }
   }
 
-  // 1. Build Raw History Array & Deduplicate Timestamps
+  // 1. Build Raw History Array
   let rawHistory = [];
   if (Array.isArray(st.rawHistory) && st.rawHistory.length > 0) {
     rawHistory = st.rawHistory.map(item => ({ ...item }));
@@ -4881,61 +4928,69 @@ function renderWaterHistoryChart(stationId, liveData) {
   // Filter out any previous synthetic/stale points if re-rendering from cache
   rawHistory = rawHistory.filter(item => !item.isStale && !String(item.timeLabel || '').includes('(ปัจจุบัน)'));
 
-  // Sync latest raw point with card level if available
-  if (cardWaterLevel !== null && !isNaN(cardWaterLevel) && rawHistory.length > 0) {
-    const lastRaw = rawHistory[rawHistory.length - 1];
-    lastRaw.waterLevel = cardWaterLevel;
-    if (isWaterGate) lastRaw.waterLevelOut = cardWaterLevel;
+  // 1.2 จัดเรียงข้อมูลจาก "อดีต ไปหา ปัจจุบัน" เสมอ (Ascending Sort)
+  rawHistory.sort((a, b) => parseSafeTime(a.timestamp || a.time) - parseSafeTime(b.timestamp || b.time));
+
+  // 2. กรองข้อมูลให้อยู่ในกรอบ 24 ชั่วโมงล่าสุดเท่านั้น (Strict 24-Hour Window)
+  const now = Date.now();
+  const past24hCutoff = now - (26 * 60 * 60 * 1000); // เผื่อบัฟเฟอร์ 26 ชม.
+  let history24h = rawHistory.filter(item => parseSafeTime(item.timestamp || item.time) >= past24hCutoff);
+  if (history24h.length === 0 && rawHistory.length > 0) {
+    history24h = rawHistory.slice(-24);
   }
 
-  // 1. กรองข้อมูลเวลาซ้ำ (Deduplicate Timestamps)
+  // กรองข้อมูลเวลาซ้ำ (Deduplicate Timestamps)
   const uniqueHistory = [];
   const seenTimes = new Set();
-  rawHistory.forEach(item => {
-    const timeKey = item.time || item.timestamp || item.timeLabel;
-    if (timeKey && !seenTimes.has(timeKey)) {
+  history24h.forEach(item => {
+    const epoch = parseSafeTime(item.timestamp || item.time);
+    const timeKey = epoch > 0 ? epoch : (item.time || item.timestamp || item.timeLabel);
+    if (!seenTimes.has(timeKey)) {
       seenTimes.add(timeKey);
       uniqueHistory.push(item);
     }
   });
 
-  if (uniqueHistory.length === 0 && rawHistory.length > 0) {
-    uniqueHistory.push(...rawHistory);
+  if (uniqueHistory.length === 0 && history24h.length > 0) {
+    uniqueHistory.push(...history24h);
   }
 
-  // 2. ลากเส้นตรงต่อจนถึงเวลาปัจจุบันเมื่อข้อมูลหยุดส่ง (Forward Fill / Flatline to Now)
-  let isStale = false;
+  // Sync latest raw point with card level if available
+  if (cardWaterLevel !== null && !isNaN(cardWaterLevel) && uniqueHistory.length > 0) {
+    const lastRaw = uniqueHistory[uniqueHistory.length - 1];
+    lastRaw.waterLevel = cardWaterLevel;
+    if (isWaterGate) lastRaw.waterLevelOut = cardWaterLevel;
+  }
+
+  // 3. ตรวจสอบสถานะ "ข้อมูลไม่อัปเดต" อย่างแม่นยำ (Accurate Stale Check)
+  let isActuallyStale = false;
   let diffHours = 0;
 
   if (uniqueHistory.length > 0) {
     const latestItem = uniqueHistory[uniqueHistory.length - 1];
-    let latestTime = NaN;
-    if (latestItem.timestamp) {
-      const d = parseStationTimestamp(latestItem.timestamp);
-      latestTime = d ? d.getTime() : new Date(latestItem.timestamp).getTime();
-    }
-    if (isNaN(latestTime) && latestItem.time) {
-      const d = parseStationTimestamp(latestItem.time);
-      latestTime = d ? d.getTime() : new Date(latestItem.time).getTime();
-    }
-    if (isNaN(latestTime) && cardSt) {
+    let latestTime = parseSafeTime(latestItem?.timestamp || latestItem?.time);
+
+    // If card has a fresher valid timestamp, use it
+    if (cardSt) {
       const cardTimeStr = cardSt.lastValidTime || cardSt.updatedAt || cardSt.time || cardSt.timestamp;
-      const d = parseStationTimestamp(cardTimeStr);
-      if (d) latestTime = d.getTime();
+      const cardTime = parseSafeTime(cardTimeStr);
+      if (cardTime > latestTime) {
+        latestTime = cardTime;
+      }
     }
 
-    const nowTime = Date.now();
-    if (!isNaN(latestTime)) {
-      diffHours = (nowTime - latestTime) / (1000 * 60 * 60);
+    if (latestTime > 0) {
+      diffHours = (now - latestTime) / (1000 * 60 * 60);
 
-      // หากข้อมูลล่าสุดหยุดส่งนานเกิน 1 ชั่วโมง (เช่น ค้างตั้งแต่ 08:20 น.)
-      if (diffHours >= 1) {
-        isStale = true;
+      // เงื่อนไข: ต้องหยุดส่งข้อมูลเกิน 2 ชั่วโมงขึ้นไปจริงๆ จึงจะถือว่าไม่อัปเดต
+      isActuallyStale = diffHours >= 2.0 && diffHours < 120; // ป้องกันค่าหลุด NaN
+
+      if (isActuallyStale) {
         // เพิ่มจุดข้อมูลเสมือนที่เวลาปัจจุบัน โดยคงระดับน้ำล่าสุดไว้ (Forward Fill)
-        const nowFormatted = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        const nowFormatted = new Date(now).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
         uniqueHistory.push({
-          timestamp: new Date().toISOString(),
-          time: new Date().toISOString(),
+          timestamp: new Date(now).toISOString(),
+          time: new Date(now).toISOString(),
           timeLabel: nowFormatted + ' (ปัจจุบัน)',
           waterLevel: latestItem.waterLevel,
           waterLevelIn: latestItem.waterLevelIn,
@@ -4945,6 +5000,19 @@ function renderWaterHistoryChart(stationId, liveData) {
       }
     }
   }
+
+  // 4. จัด Format ป้ายแกนเวลาแต่ละจุดให้เป็นช่วงเวลาที่อ่านง่าย (HH:mm)
+  uniqueHistory.forEach(item => {
+    if (!item.isStale) {
+      const epoch = parseSafeTime(item.timestamp || item.time);
+      if (epoch > 0) {
+        const d = new Date(epoch);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        item.timeLabel = `${hh}:${mm}`;
+      }
+    }
+  });
 
   // Populate back to station arrays for Chart.js
   st.timeLabels = uniqueHistory.map(item => item.timeLabel);
@@ -5047,15 +5115,13 @@ function renderWaterHistoryChart(stationId, liveData) {
     }
   }
 
-  // 4. แสดงป้ายกำกับเตือนเมื่อข้อมูลค้าง (Stale Badge)
-  // หาก diffHours >= 2: ที่ Badge มุมขวาบนของกราฟ ให้แสดงป้ายสีส้มอำพัน:
-  // ⚠️ ข้อมูลไม่อัปเดต (${Math.round(diffHours)} ชม. ที่แล้ว) — ระดับน้ำคงค่าเดิม
+  // 3. การแสดงผล Badge มุมขวาบน และ Legend
   const staleBadge = document.getElementById('chartStaleBadge');
   const staleBadgeText = document.getElementById('chartStaleBadgeText');
   if (staleBadge) {
-    if (diffHours >= 2) {
+    if (isActuallyStale) {
       const roundedHours = Math.max(2, Math.round(diffHours));
-      const badgeText = `⚠️ ข้อมูลไม่อัปเดต (${roundedHours} ชม. ที่แล้ว) — ระดับน้ำคงค่าเดิม`;
+      const badgeText = `⚠️ ข้อมูลไม่อัปเดต (${roundedHours} ชม. ที่แล้ว)`;
       if (staleBadgeText) {
         staleBadgeText.textContent = badgeText;
       } else {
@@ -5064,6 +5130,7 @@ function renderWaterHistoryChart(stationId, liveData) {
       staleBadge.classList.remove('hidden');
       staleBadge.classList.add('flex');
     } else {
+      // หากข้อมูลสดใหม่ (diffHours < 2.0 เช่น เคส ST-1): ห้ามแสดงป้ายข้อมูลไม่อัปเดตเด็ดขาด
       staleBadge.classList.add('hidden');
       staleBadge.classList.remove('flex');
     }
@@ -5071,7 +5138,7 @@ function renderWaterHistoryChart(stationId, liveData) {
 
   const staleLegend = document.getElementById('chartStaleLegend');
   if (staleLegend) {
-    if (isStale) {
+    if (isActuallyStale) {
       staleLegend.classList.remove('hidden');
       staleLegend.classList.add('flex');
     } else {
@@ -5177,14 +5244,14 @@ function renderWaterHistoryChart(stationId, liveData) {
           fill: !isWaterGate,
           tension: 0.1,
           stepped: 'before',
-          pointRadius: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? 4.5 : 2.5),
+          pointRadius: (ctx) => (isActuallyStale && ctx.dataIndex === uniqueHistory.length - 1 ? 4.5 : 2.5),
           pointHoverRadius: 6,
-          pointBackgroundColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fb923c' : '#38bdf8'),
-          pointBorderColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fed7aa' : '#bae6fd'),
+          pointBackgroundColor: (ctx) => (isActuallyStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fb923c' : '#38bdf8'),
+          pointBorderColor: (ctx) => (isActuallyStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fed7aa' : '#bae6fd'),
           pointBorderWidth: 1.5,
           segment: {
-            borderColor: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? '#fb923c' : undefined),
-            borderDash: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? [6, 4] : undefined)
+            borderColor: (ctx) => (isActuallyStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? '#fb923c' : undefined),
+            borderDash: (ctx) => (isActuallyStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? [6, 4] : undefined)
           }
         },
         ...(isWaterGate ? [{
@@ -5196,14 +5263,14 @@ function renderWaterHistoryChart(stationId, liveData) {
           fill: false,
           tension: 0.1,
           stepped: 'before',
-          pointRadius: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? 4.5 : 2.5),
+          pointRadius: (ctx) => (isActuallyStale && ctx.dataIndex === uniqueHistory.length - 1 ? 4.5 : 2.5),
           pointHoverRadius: 6,
-          pointBackgroundColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fb923c' : '#c084fc'),
-          pointBorderColor: (ctx) => (isStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fed7aa' : '#f3e8ff'),
+          pointBackgroundColor: (ctx) => (isActuallyStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fb923c' : '#c084fc'),
+          pointBorderColor: (ctx) => (isActuallyStale && ctx.dataIndex === uniqueHistory.length - 1 ? '#fed7aa' : '#f3e8ff'),
           pointBorderWidth: 1.5,
           segment: {
-            borderColor: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? '#fb923c' : undefined),
-            borderDash: (ctx) => (isStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? [6, 4] : undefined)
+            borderColor: (ctx) => (isActuallyStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? '#fb923c' : undefined),
+            borderDash: (ctx) => (isActuallyStale && ctx.p1DataIndex === uniqueHistory.length - 1 ? [6, 4] : undefined)
           }
         }] : []),
         ...(isWaterGate ? [
@@ -5260,7 +5327,7 @@ function renderWaterHistoryChart(stationId, liveData) {
             label: function(context) {
               const val = context.parsed.y;
               const index = context.dataIndex;
-              const isStalePoint = isStale && index === uniqueHistory.length - 1;
+              const isStalePoint = isActuallyStale && index === uniqueHistory.length - 1;
               const staleSuffix = isStalePoint ? ' (คงค่าเดิม - ข้อมูลค้าง)' : '';
 
               if (isWaterGate && (context.datasetIndex === 0 || context.datasetIndex === 1)) {
@@ -5289,10 +5356,18 @@ function renderWaterHistoryChart(stationId, liveData) {
           },
           ticks: {
             color: '#94a3b8',
-            font: { size: 10 },
+            font: { size: 10, family: 'JetBrains Mono, monospace' },
+            padding: 8,
             maxRotation: 0,
+            minRotation: 0,
             autoSkip: true,
-            maxTicksLimit: 8
+            maxTicksLimit: 7,
+            callback: function(val) {
+              const label = this.getLabelForValue(val) || '';
+              const clean = label.replace(/\s*\(ปัจจุบัน\)/, '');
+              const m = clean.match(/(\d{1,2}:\d{2})/);
+              return m ? m[1] : clean;
+            }
           }
         },
         y: {

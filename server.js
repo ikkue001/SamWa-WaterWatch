@@ -719,7 +719,37 @@ function resolveStationMeta(query) {
     }
   }
 
-  return STATIONS_MAP['thaiwater_k8'];
+}
+
+function parseSafeTime(timeStr) {
+  if (!timeStr) return 0;
+  if (typeof timeStr === 'number') return isNaN(timeStr) ? 0 : timeStr;
+  if (timeStr instanceof Date) return isNaN(timeStr.getTime()) ? 0 : timeStr.getTime();
+
+  let cleanStr = timeStr.toString().trim();
+  if (!cleanStr) return 0;
+  cleanStr = cleanStr.replace(/25(\d{2})/g, (m) => String(parseInt(m, 10) - 543));
+
+  const dmyMatch = cleanStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    const hour = dmyMatch[4].padStart(2, '0');
+    const minute = dmyMatch[5].padStart(2, '0');
+    const second = (dmyMatch[6] || '00').padStart(2, '0');
+    cleanStr = `${year}-${month}-${day}T${hour}:${minute}:${second}+07:00`;
+  } else {
+    if (!cleanStr.includes('Z') && !cleanStr.includes('+')) {
+      cleanStr = cleanStr.replace(' ', 'T');
+      if (!cleanStr.includes('+') && !cleanStr.includes('Z')) {
+        cleanStr = cleanStr + '+07:00';
+      }
+    }
+  }
+
+  const t = new Date(cleanStr).getTime();
+  return isNaN(t) ? 0 : t;
 }
 
 function parseThaiDate(str) {
@@ -898,9 +928,9 @@ async function fetchRealBmaWaterflowHistoryServer(meta, now = new Date()) {
       const val = parseFloat(t.water);
       const timeStr = t.serverTime || t.siteTime;
       if (timeStr && !isNaN(val) && val > -50 && val < 50) {
-        const d = new Date(timeStr.endsWith('Z') ? timeStr : timeStr + 'Z');
-        if (!isNaN(d.getTime())) {
-          rows.push({ date: d, val: parseFloat(val.toFixed(2)) });
+        const ms = parseSafeTime(timeStr);
+        if (ms > 0) {
+          rows.push({ date: new Date(ms), val: parseFloat(val.toFixed(2)) });
         }
       }
     }
