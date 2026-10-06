@@ -566,7 +566,7 @@ function initRealtimeSSE() {
   }
 
   updateRealtimeBadge('connecting');
-  sseConnection = new EventSource('/api/realtime');
+  sseConnection = new EventSource('/api/realtime?_t=' + Date.now());
 
   sseConnection.onopen = () => {
     appState.realtimeConnected = true;
@@ -1067,9 +1067,12 @@ function setupEventListeners() {
       if (icon) icon.classList.add('spinning-360');
 
       try {
-        let res = await fetch('/api/water-summary', { cache: 'no-store' });
+        let res = await fetch('/api/stations?_t=' + Date.now(), { cache: 'no-store' });
         if (!res.ok) {
-          res = await fetch('/api/refresh', { method: 'POST', cache: 'no-store' });
+          res = await fetch('/api/water-summary?_t=' + Date.now(), { cache: 'no-store' });
+        }
+        if (!res.ok) {
+          res = await fetch('/api/refresh?_t=' + Date.now(), { method: 'POST', cache: 'no-store' });
         }
         const data = await res.json();
         applyDataUpdate(data);
@@ -1282,7 +1285,10 @@ function recalculateDistances() {
  */
 async function fetchWaterSummary() {
   try {
-    const res = await fetch('/api/water-summary', { cache: 'no-store' });
+    let res = await fetch('/api/stations?_t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) {
+      res = await fetch('/api/water-summary?_t=' + Date.now(), { cache: 'no-store' });
+    }
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
     applyDataUpdate(data);
@@ -1767,7 +1773,7 @@ async function renderStationPopupSparkline(station) {
   renderPopupChart(station.id, fallbackValues);
 
   try {
-    const response = await fetch(`/api/water-history?station=${encodeURIComponent(station.id)}`, { cache: 'no-store' });
+    const response = await fetch(`/api/water-history?station=${encodeURIComponent(station.id)}&_t=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) return;
     const data = await response.json();
     const selected = data.selectedStation || data;
@@ -4186,7 +4192,7 @@ async function loadAiAnalysis(forceRefresh = false) {
   }
 
   try {
-    const url = forceRefresh ? `/api/ai-analysis?t=${Date.now()}` : '/api/ai-analysis';
+    const url = `/api/ai-analysis?_t=${Date.now()}`;
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -4681,7 +4687,7 @@ async function initWaterHistoryChart() {
 
   try {
     await loadChartJs();
-    const res = await fetch(`/api/water-history?station=${encodeURIComponent(currentChartStationId)}`, { cache: 'no-store' });
+    const res = await fetch(`/api/water-history?station=${encodeURIComponent(currentChartStationId)}&_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     historicalDataCache = data.stations || {};
@@ -4800,7 +4806,7 @@ async function selectStationChart(stationId) {
 
   try {
     await loadChartJs();
-    const res = await fetch(`/api/water-history?station=${encodeURIComponent(stationId)}`, { cache: 'no-store' });
+    const res = await fetch(`/api/water-history?station=${encodeURIComponent(stationId)}&_t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 

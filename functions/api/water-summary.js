@@ -208,20 +208,20 @@ const STATIONS_MASTER_CONFIG = [
 
 // Realistic baselines for cold start or network fallback
 const FALLBACK_BASELINES = {
-  'thaiwater_k8':    { level: 1.92, time: '02/10/2569 20:30' },
-  'bma_wf_k0801':    { level: 1.80, time: '02/10/2569 20:45' },
-  'bma_wf_khw01':    { level: 1.87, time: '02/10/2569 20:45' },
-  'bma_wf_swa02':    { level: 1.46, time: '02/10/2569 20:45' },
-  'bma_weather_126': { level: 1.37, time: '02/10/2569 21:00' },
-  'bma_weather_125': { level: 1.35, time: '02/10/2569 21:00' },
-  'bma_weather_124': { level: 0.97, time: '02/10/2569 21:00' },
-  'bma_weather_127': { level: 0.98, time: '02/10/2569 21:00' },
+  'thaiwater_k8':    { level: 1.91, time: '06/10/2569 11:10' },
+  'bma_wf_k0801':    { level: 1.81, time: '06/10/2569 11:10' },
+  'bma_wf_khw01':    { level: 1.79, time: '06/10/2569 11:10' },
+  'bma_wf_swa02':    { level: 1.56, time: '06/10/2569 11:10' },
+  'bma_weather_126': { level: 1.29, time: '06/10/2569 11:20' },
+  'bma_weather_125': { level: 1.22, time: '06/10/2569 11:20' },
+  'bma_weather_124': { level: 0.94, time: '06/10/2569 11:15' },
+  'bma_weather_127': { level: 0.96, time: '06/10/2569 11:20' },
   'bma_weather_21':  {
-    level: 1.39,
+    level: 1.42,
     inside: { label: 'ด้านใน', level: 0.93, warning: 0.70, critical: 0.80, bank: 1.30 },
-    outside: { label: 'ด้านนอก', level: 1.39, warning: 1.10, critical: 1.30, bank: 1.70 },
+    outside: { label: 'ด้านนอก', level: 1.42, warning: 1.10, critical: 1.30, bank: 1.70 },
     gateOpening: 0.43,
-    time: '02/10/2569 21:00'
+    time: '06/10/2569 11:15'
   }
 };
 
@@ -1012,47 +1012,24 @@ export async function onRequest(context) {
     });
   }
 
-  // Cloudflare Edge Cache API Integration
-  const cache = typeof caches !== 'undefined' ? caches.default : null;
-  const cacheUrl = new URL(request.url);
-  const cacheKey = new Request(cacheUrl.toString(), request);
-
-  if (cache) {
-    try {
-      const cached = await cache.match(cacheKey);
-      if (cached) {
-        return cached;
-      }
-    } catch (e) {
-      // cache match failed, proceed to fetch
-    }
-  }
-
   // Fetch live telemetry data
   const data = await assembleWaterSummaryData();
 
-  // Edge Caching Headers: 2-minute CDN cache + 5-minute Stale-While-Revalidate
-  const response = new Response(JSON.stringify(data), {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'X-Edge-Source': 'Cloudflare-Pages-Function'
+  };
+
+  return new Response(JSON.stringify(data), {
     status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=120, s-maxage=120, stale-while-revalidate=300',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'X-Edge-Source': 'Cloudflare-Pages-Function'
-    }
+    headers
   });
-
-  // Store in Cloudflare Edge Cache
-  if (cache && context.waitUntil) {
-    try {
-      context.waitUntil(cache.put(cacheKey, response.clone()));
-    } catch (e) {
-      // cache put ignore
-    }
-  }
-
-  return response;
 }
 
 export async function onRequestGet(context) {

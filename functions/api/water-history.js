@@ -754,15 +754,20 @@ export async function onRequest(context) {
     stations: allStations
   };
 
+  const headers = {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'X-Data-Source': selectedStationData.source || 'Official-Telemetry'
+  };
+
   return new Response(JSON.stringify(payload), {
     status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=120, s-maxage=120, stale-while-revalidate=300',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'X-Data-Source': selectedStationData.source || 'Official-Telemetry'
-    }
+    headers
   });
 }
 

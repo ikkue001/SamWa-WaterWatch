@@ -41,12 +41,12 @@ const lastKnownValidMap = new Map();
 
 // Initial realistic baselines to prevent 0.00 even on cold start network failure
 const INITIAL_BASELINES = {
-  'bma_weather_126': { level: 1.38, time: '02/10/2569 17:15' },
-  'bma_weather_125': { level: 1.36, time: '02/10/2569 17:15' },
-  'bma_weather_124': { level: 0.98, time: '02/10/2569 17:15' },
-  'bma_weather_127': { level: 0.99, time: '02/10/2569 17:15' },
+  'bma_weather_126': { level: 1.29, time: '06/10/2569 11:20' },
+  'bma_weather_125': { level: 1.22, time: '06/10/2569 11:20' },
+  'bma_weather_124': { level: 0.94, time: '06/10/2569 11:15' },
+  'bma_weather_127': { level: 0.96, time: '06/10/2569 11:20' },
   'bma_weather_21':  {
-    level: 1.39,
+    level: 1.42,
     isGate: true,
     inside: {
       label: 'ด้านใน',
@@ -57,13 +57,13 @@ const INITIAL_BASELINES = {
     },
     outside: {
       label: 'ด้านนอก',
-      level: 1.39,
+      level: 1.42,
       warning: 1.10,
       critical: 1.30,
       bank: 1.70
     },
     gateOpening: 0.43,
-    time: '02/10/2569 20:45'
+    time: '06/10/2569 11:15'
   }
 };
 

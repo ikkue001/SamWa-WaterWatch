@@ -480,6 +480,16 @@ function getProcessedSummaryPayload() {
 
 // ================= REST & REALTIME API ROUTES =================
 
+// Disable CDN and Browser Caching on all API routes
+app.use('/api', (req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
+  next();
+});
+
 /**
  * GET /api/realtime (Server-Sent Events Persistent Connection)
  */
@@ -515,9 +525,9 @@ app.get('/api/realtime', (req, res) => {
 });
 
 /**
- * GET /api/water-summary
+ * GET /api/water-summary and /api/stations
  */
-app.get('/api/water-summary', (req, res) => {
+app.get(['/api/water-summary', '/api/stations'], (req, res) => {
   res.json(getProcessedSummaryPayload());
 });
 
