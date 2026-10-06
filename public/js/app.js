@@ -1442,31 +1442,82 @@ function formatCardDateTime(timeStr) {
 }
 window.formatCardDateTime = formatCardDateTime;
 
-function getUnifiedWaterTrend(levels) {
-  const numericLevels = Array.isArray(levels)
-    ? levels.map(value => Number(value)).filter(Number.isFinite)
-    : [];
-
-  if (numericLevels.length < 2) {
-    return { text: 'ทรงตัว', icon: '—', status: 'stable', color: 'text-slate-400' };
+function getUnifiedWaterTrend(historyItems) {
+  if (!historyItems || !Array.isArray(historyItems) || historyItems.length < 5) {
+    return {
+      text: "แนวโน้มทรงตัว",
+      icon: "—",
+      status: "stable",
+      color: "text-slate-300 bg-slate-800/60 border-slate-700/50"
+    };
   }
 
-  const current = numericLevels[numericLevels.length - 1];
-  const lookbackIndex = Math.max(0, numericLevels.length - 4);
-  const recentBase = numericLevels[lookbackIndex];
-  const diff = current - recentBase;
+  const getVal = item => {
+    if (item === null || item === undefined) return 0;
+    if (typeof item === 'object') {
+      return Number(item.waterLevel ?? item.level ?? item.val ?? item.water ?? 0);
+    }
+    return Number(item) || 0;
+  };
 
-  if (diff > 0.05) {
-    return { text: 'แนวโน้มเพิ่มขึ้น', icon: '📈', status: 'rising', color: 'text-amber-400' };
+  // 1. ดึงระดับน้ำล่าสุด และค่าเฉลี่ย 1 ชั่วโมงล่าสุด (ลดผลกระทบจากคลื่น/Sensor Noise)
+  const recentItems = historyItems.slice(-4);
+  const currentAvg = recentItems.reduce((acc, cur) => acc + getVal(cur), 0) / recentItems.length;
+
+  // 2. ดึงจุดเทียบระยะกลาง (ย้อนหลัง 6 - 8 ชั่วโมง หรือกึ่งกลางชุดข้อมูล 24 ชม.)
+  // หากข้อมูลมี 24 ชม. (ประมาณ 24-96 จุด) ให้ย้อนกลับไปประมาณ 1/3 ถึง 1/2 ของ Array
+  const midIndex = Math.max(0, Math.floor(historyItems.length * 0.6) - 1);
+  const midBaseItem = historyItems[midIndex];
+  const midBaseLevel = getVal(midBaseItem);
+
+  // 3. คำนวณส่วนต่างระดับน้ำระยะกลาง (Delta)
+  const diffMedium = currentAvg - midBaseLevel;
+
+  // 4. ตรวจสอบร่วมกับส่วนต่าง 24 ชม. ทั้งหมด (Total Net Change)
+  const firstLevel = getVal(historyItems[0]);
+  const diff24h = getVal(historyItems[historyItems.length - 1]) - firstLevel;
+
+  // 5. เกณฑ์การตัดสินทิศทางระยะกลาง:
+  // เพิ่มขึ้น: น้ำขึ้นเกิน 5 ซม. ในระยะกลาง หรือขึ้นสะสมเกิน 8 ซม. ใน 24 ชม.
+  if (diffMedium >= 0.05 || diff24h >= 0.08) {
+    return {
+      text: "แนวโน้มเพิ่มขึ้น",
+      icon: "📈",
+      status: "rising",
+      color: "text-amber-400 bg-amber-500/10 border-amber-500/30"
+    };
+  } 
+  // ลดลง: น้ำลดลงเกิน 5 ซม. ในระยะกลาง หรือลดสะสมเกิน 8 ซม. ใน 24 ชม.
+  else if (diffMedium <= -0.05 || diff24h <= -0.08) {
+    return {
+      text: "แนวโน้มลดลง",
+      icon: "📉",
+      status: "falling",
+      color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30"
+    };
+  } 
+  // ทรงตัว: น้ำเปลี่ยนแปลงไม่เกิน 4-5 ซม. ตลอดช่วงเวลา
+  else {
+    return {
+      text: "แนวโน้มทรงตัว",
+      icon: "—",
+      status: "stable",
+      color: "text-slate-300 bg-slate-800/60 border-slate-700/50"
+    };
   }
-  if (diff < -0.05) {
-    return { text: 'แนวโน้มลดลง', icon: '📉', status: 'falling', color: 'text-cyan-400' };
-  }
-  return { text: 'แนวโน้มทรงตัว', icon: '—', status: 'stable', color: 'text-slate-300' };
 }
 window.getUnifiedWaterTrend = getUnifiedWaterTrend;
 
 function getPopupHistoryValues(station) {
+  const cached = (typeof popupHistoryCache !== 'undefined' && popupHistoryCache.get(station.id)) ||
+    (window.cachedStationHistory && (window.cachedStationHistory[station.id] || window.cachedStationHistory[station.stCode]));
+  if (cached) {
+    if (Array.isArray(cached.outside) && cached.outside.length > 0) return cached.outside;
+    if (Array.isArray(cached.waterLevels) && cached.waterLevels.length > 0) return cached.waterLevels;
+    if (Array.isArray(cached.inside) && cached.inside.length > 0) return cached.inside;
+    if (Array.isArray(cached) && cached.length > 0) return cached;
+  }
+
   const rawValues = station.waterLevels || station.history || station.waterHistory;
   const values = Array.isArray(rawValues)
     ? rawValues.map(value => Number(value)).filter(Number.isFinite).slice(-24)
@@ -1651,7 +1702,7 @@ async function renderPopupChart(stationId, data) {
   if (trendElement) {
     const trendValues = outsideValues.length > 0 ? outsideValues : insideValues;
     const trend = getUnifiedWaterTrend(trendValues);
-    trendElement.className = `${trend.color} font-semibold`;
+    trendElement.className = `px-2 py-0.5 rounded-md text-[11px] border inline-flex items-center gap-1 ${trend.color} font-semibold mt-1`;
     trendElement.textContent = `${trend.icon} ${trend.text}`;
   }
 
@@ -2025,7 +2076,7 @@ function updateMapMarkers() {
             <span class="text-[9px] text-cyan-400 opacity-80 group-hover:opacity-100">แตะเพื่อดูกราฟใหญ่ ↗</span>
           </div>
           <div>
-            <b id="popup-trend-${station.id}" class="${popupTrend.color} font-semibold">${popupTrend.icon} ${popupTrend.text}</b>
+            <span id="popup-trend-${station.id}" class="px-2 py-0.5 rounded-md text-[11px] border inline-flex items-center gap-1 ${popupTrend.color} font-semibold mt-1">${popupTrend.icon} ${popupTrend.text}</span>
             <div style="height: 55px; min-height: 55px; position: relative;" class="w-full mt-1">
               <canvas id="${popupChartId}"></canvas>
             </div>
@@ -5157,10 +5208,15 @@ function renderWaterHistoryChart(stationId, liveData) {
   const trendPill = document.getElementById('chartTrendPill');
   const trendText = document.getElementById('chartTrendText');
   if (trendPill && trendText) {
-    const trend = getUnifiedWaterTrend(st.waterLevels);
-    trendPill.className = `px-2.5 py-1 rounded-xl text-xs font-semibold ${trend.color} border border-slate-500/30 flex items-center gap-1.5 shadow-sm`;
+    const trendHistory = (isWaterGate && Array.isArray(st.waterLevelsOut) && st.waterLevelsOut.length > 0)
+      ? st.waterLevelsOut
+      : st.waterLevels;
+    const trend = getUnifiedWaterTrend(trendHistory);
+    trendPill.className = `px-2.5 py-1 rounded-xl text-xs font-semibold ${trend.color} border flex items-center gap-1.5 shadow-sm`;
     trendText.textContent = `${trend.icon} ${trend.text}`;
-    trendText.className = `${trend.color} font-semibold`;
+    trendText.className = 'font-semibold';
+    const trendIcon = trendPill.querySelector('i');
+    if (trendIcon) trendIcon.style.display = 'none';
   }
 
   // Update Stats Tiles (Matching latest level 1:1)
